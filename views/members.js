@@ -1,0 +1,4 @@
+import{api}from'../assets/js/api.js';import{esc}from'../assets/js/components.js';
+export async function render(){const d=await api('listPayees',{type:'all',status:'all'});return `<div class="toolbar"><input id="member-q" placeholder="氏名・団体名で検索"><button class="btn" id="member-search">検索</button></div><div class="panel table-wrap"><table class="table"><thead><tr><th>区分</th><th>名称</th><th>連絡先</th><th>状態</th></tr></thead><tbody id="member-body">${rows(d.items)}</tbody></table></div>`}
+function rows(items){return(items||[]).map(x=>`<tr><td>${esc(x.memberType||x.sourceType)}</td><td>${esc(x.name)}</td><td>${esc(x.phone||x.email)}</td><td>${esc(x.status)}</td></tr>`).join('')}
+export function bind(){document.querySelector('#member-search')?.addEventListener('click',async()=>{const d=await api('listPayees',{type:'all',status:'all',keyword:document.querySelector('#member-q').value});document.querySelector('#member-body').innerHTML=rows(d.items)})}
