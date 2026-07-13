@@ -107,22 +107,157 @@ export async function render(ctx) {
 /**
  * イベントを設定する。
  */
+/**
+ * イベントを設定する。
+ */
 export function bind() {
   const button =
     document.querySelector(
       '.annual-fee-create'
     );
 
-  if (button) {
-    button.addEventListener(
-      'click',
-      function () {
-        alert(
-          '次のステップで一括下書き作成APIを接続します。'
-        );
-      }
-    );
+  if (!button) {
+    return;
   }
+
+  button.addEventListener(
+    'click',
+    async function () {
+      const checked =
+        Array.from(
+          document.querySelectorAll(
+            '.annual-fee-select:checked'
+          )
+        );
+
+      if (!checked.length) {
+        alert(
+          '下書きを作成する対象を選択してください。'
+        );
+        return;
+      }
+
+      const candidates =
+        checked.map(
+          function (checkbox) {
+            return {
+              source_type:
+                checkbox.dataset.sourceType,
+
+              source_id:
+                checkbox.dataset.sourceId,
+
+              selected:
+                true
+            };
+          }
+        );
+
+      const confirmed =
+        window.confirm(
+          `${candidates.length}件の年会費請求書を下書き作成します。\nよろしいですか？`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      const originalText =
+        button.textContent;
+
+      button.disabled = true;
+      button.textContent =
+        '下書きを作成しています…';
+
+      try {
+        const result =
+          await api(
+            'createAnnualFeeDrafts',
+            {
+              fiscal_year:
+                currentData.fiscalYear,
+
+              issue_date:
+                currentData.issueDate,
+
+              due_date:
+                currentData.dueDate,
+
+              subject:
+                currentData.subject,
+
+              public_remarks:
+                currentData.publicRemarks,
+
+              candidates:
+                candidates
+            }
+          );
+
+        const successCount =
+          Array.isArray(result.success)
+            ? result.success.length
+            : 0;
+
+        const skippedCount =
+          Array.isArray(result.skipped)
+            ? result.skipped.length
+            : 0;
+
+        const errorCount =
+          Array.isArray(result.errors)
+            ? result.errors.length
+            : 0;
+
+        let message =
+          '年会費請求書の一括処理が完了しました。' +
+          `\n\n作成成功：${successCount}件` +
+          `\nスキップ：${skippedCount}件` +
+          `\nエラー：${errorCount}件`;
+
+        if (errorCount > 0) {
+          const errorDetails =
+            result.errors
+              .map(
+                function (row) {
+                  return (
+                    '・' +
+                    (row.name || '名称不明') +
+                    '：' +
+                    (row.error || 'エラー')
+                  );
+                }
+              )
+              .join('\n');
+
+          message +=
+            '\n\nエラー内容\n' +
+            errorDetails;
+        }
+
+        alert(message);
+
+        window.location.reload();
+
+      } catch (error) {
+        console.error(
+          '年会費一括作成エラー',
+          error
+        );
+
+        alert(
+          error &&
+          error.message
+            ? error.message
+            : '年会費請求書の一括作成に失敗しました。'
+        );
+
+        button.disabled = false;
+        button.textContent =
+          originalText;
+      }
+    }
+  );
 }
 
 
