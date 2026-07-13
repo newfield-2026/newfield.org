@@ -168,6 +168,22 @@ function renderRow_(invoice) {
             display:flex;
             gap:8px;
             flex-wrap:wrap;
+
+            ${
+  invoiceId
+    ? `
+      <button
+        type="button"
+        class="btn invoice-detail"
+        data-invoice-id="${escapeAttr_(
+          invoiceId
+        )}"
+      >
+        詳細
+      </button>
+    `
+    : ''
+}
           "
         >
           ${
@@ -290,10 +306,37 @@ function getStatusLabel_(
  * 一覧画面のイベントを設定する。
  */
 export function bind() {
+  bindDetailButtons_();
   bindEditButtons_();
   bindPaymentButtons_();
 }
+　/**
+ * 請求書詳細ボタンを設定する。
+ */
+function bindDetailButtons_() {
+  document
+    .querySelectorAll('.invoice-detail')
+    .forEach(function (button) {
+      button.addEventListener(
+        'click',
+        function () {
+          const invoiceId =
+            button.dataset.invoiceId || '';
 
+          if (!invoiceId) {
+            return;
+          }
+
+          go(
+            'invoiceDetail',
+            {
+              invoiceId: invoiceId
+            }
+          );
+        }
+      );
+    });
+}
 
 /**
  * 下書き編集ボタンを設定する。
