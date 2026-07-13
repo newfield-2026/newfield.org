@@ -117,6 +117,12 @@ function renderRow_(invoice) {
   const isDraft =
     status === 'draft';
 
+  const canRegisterPayment =
+    status === 'issued' &&
+    paymentStatus !== 'paid' &&
+    paymentStatus !== 'overpaid' &&
+    Boolean(invoiceId);
+
   const statusLabel =
     getStatusLabel_(
       status,
@@ -181,6 +187,31 @@ function renderRow_(invoice) {
           }
 
           ${
+            canRegisterPayment
+              ? `
+                <button
+                  type="button"
+                  class="btn primary invoice-payment"
+                  data-invoice-id="${escapeAttr_(
+                    invoiceId
+                  )}"
+                  data-invoice-number="${escapeAttr_(
+                    invoice.invoice_number || ''
+                  )}"
+                  data-payee-name="${escapeAttr_(
+                    invoice.payee_name_snapshot || ''
+                  )}"
+                  data-total="${escapeAttr_(
+                    invoice.total_incl_tax || 0
+                  )}"
+                >
+                  入金登録
+                </button>
+              `
+              : ''
+          }
+
+          ${
             pdfUrl
               ? `
                 <a
@@ -218,8 +249,10 @@ function getStatusLabel_(
 
   if (status === 'draft') {
     invoiceLabel = '下書き';
+
   } else if (status === 'issued') {
     invoiceLabel = '発行済み';
+
   } else if (
     status === 'void' ||
     status === 'voided'
@@ -231,10 +264,18 @@ function getStatusLabel_(
 
   if (paymentStatus === 'paid') {
     paymentLabel = '・入金済み';
+
   } else if (
+    paymentStatus === 'partially_paid' ||
     paymentStatus === 'partial'
   ) {
     paymentLabel = '・一部入金';
+
+  } else if (
+    paymentStatus === 'overpaid'
+  ) {
+    paymentLabel = '・過入金';
+
   } else if (
     paymentStatus === 'unpaid'
   ) {
@@ -249,6 +290,15 @@ function getStatusLabel_(
  * 一覧画面のイベントを設定する。
  */
 export function bind() {
+  bindEditButtons_();
+  bindPaymentButtons_();
+}
+
+
+/**
+ * 下書き編集ボタンを設定する。
+ */
+function bindEditButtons_() {
   document
     .querySelectorAll('.invoice-edit')
     .forEach(function (button) {
@@ -271,6 +321,306 @@ export function bind() {
         }
       );
     });
+}
+
+
+/**
+ * 入金登録ボタンを設定する。
+ */
+function bindPaymentButtons_() {
+  document
+    .querySelectorAll('.invoice-payment')
+    .forEach(function (button) {
+      button.addEventListener(
+        'click',
+        async function () {
+          await registerPayment_(
+            button
+          );
+        }
+      );
+    });
+}
+
+
+/**
+ * 入金情報を入力して登録する。
+ *
+ * MVPでは、まず標準入力画面を使用する。
+ *
+ * @param {HTMLButtonElement} button
+ */
+async function registerPayment_(button) {
+  const invoiceId =
+    button.dataset.invoiceId || '';
+
+  const invoiceNumber =
+    button.dataset.invoiceNumber || '';
+
+  const payeeName =
+    button.dataset.payeeName || '';
+
+  const invoiceTotal =
+    Number(
+      button.dataset.total || 0
+    );
+
+  if (!invoiceId) {
+    alert(
+      '請求書IDを確認できません。'
+    );
+    return;
+  }
+
+  const today =
+    getTodayString_();
+
+  const paymentDate =
+    window.prompt(
+      [
+        '入金日を入力してください。',
+        '形式：年-月-日',
+        '',
+        invoiceNumber,
+        payeeName
+      ].join('\n'),
+      today
+    );
+
+  if (paymentDate === null) {
+    return;
+  }
+
+  const normalizedPaymentDate =
+    String(paymentDate).trim();
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      normalizedPaymentDate
+    )
+  ) {
+    alert(
+      '入金日は「2026-07-13」の形式で入力してください。'
+    );
+    return;
+  }
+
+  const amountInput =
+    window.prompt(
+      '入金額を数字で入力してください。',
+      String(invoiceTotal)
+    );
+
+  if (amountInput === null) {
+    return;
+  }
+
+  const normalizedAmount =
+    String(amountInput)
+      .replace(/,/g, '')
+      .trim();
+
+  const amount =
+    Number(normalizedAmount);
+
+  if (
+    !Number.isInteger(amount) ||
+    amount <= 0
+  ) {
+    alert(
+      '入金額は1円以上の整数で入力してください。'
+    );
+    return;
+  }
+
+  const paymentMethodInput =
+    window.prompt(
+      [
+        '入金方法を入力してください。',
+        '',
+        '例：',
+        '銀行振込',
+        '現金',
+        'その他'
+      ].join('\n'),
+      '銀行振込'
+    );
+
+  if (paymentMethodInput === null) {
+    return;
+  }
+
+  const paymentMethod =
+    String(
+      paymentMethodInput
+    ).trim();
+
+  if (!paymentMethod) {
+    alert(
+      '入金方法を入力してください。'
+    );
+    return;
+  }
+
+  const payerNameInput =
+    window.prompt(
+      '振込名義・入金者名を入力してください。',
+      payeeName
+    );
+
+  if (payerNameInput === null) {
+    return;
+  }
+
+  const remarksInput =
+    window.prompt(
+      '備考があれば入力してください。',
+      ''
+    );
+
+  if (remarksInput === null) {
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      [
+        '次の内容で入金登録します。',
+        '',
+        '請求書：' +
+          (
+            invoiceNumber ||
+            invoiceId
+          ),
+        '請求先：' +
+          payeeName,
+        '入金日：' +
+          normalizedPaymentDate,
+        '入金額：' +
+          amount.toLocaleString(
+            'ja-JP'
+          ) +
+          '円',
+        '入金方法：' +
+          paymentMethod,
+        '',
+        '登録してよろしいですか？'
+      ].join('\n')
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const originalText =
+    button.textContent;
+
+  button.disabled = true;
+  button.textContent =
+    '登録中...';
+
+  try {
+    const result = await api(
+      'registerPayment',
+      {
+        invoiceId:
+          invoiceId,
+
+        paymentDate:
+          normalizedPaymentDate,
+
+        amount:
+          amount,
+
+        paymentMethod:
+          paymentMethod,
+
+        payerName:
+          String(
+            payerNameInput || ''
+          ).trim(),
+
+        remarks:
+          String(
+            remarksInput || ''
+          ).trim()
+      }
+    );
+
+    const paymentStatus =
+      result.paymentStatus ||
+      result.invoice?.payment_status ||
+      '';
+
+    let message =
+      '入金を登録しました。';
+
+    if (
+      paymentStatus ===
+      'partially_paid'
+    ) {
+      message =
+        '一部入金として登録しました。';
+
+    } else if (
+      paymentStatus === 'paid'
+    ) {
+      message =
+        '入金済みとして登録しました。';
+
+    } else if (
+      paymentStatus === 'overpaid'
+    ) {
+      message =
+        '入金額が請求額を超えています。過入金として登録しました。';
+    }
+
+    alert(message);
+
+    window.location.reload();
+
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      error && error.message
+        ? error.message
+        : '入金登録に失敗しました。'
+    );
+
+    button.disabled = false;
+    button.textContent =
+      originalText;
+  }
+}
+
+
+/**
+ * 今日の日付をyyyy-MM-dd形式で返す。
+ *
+ * @return {string}
+ */
+function getTodayString_() {
+  const now = new Date();
+
+  const year =
+    now.getFullYear();
+
+  const month =
+    String(
+      now.getMonth() + 1
+    ).padStart(2, '0');
+
+  const day =
+    String(
+      now.getDate()
+    ).padStart(2, '0');
+
+  return [
+    year,
+    month,
+    day
+  ].join('-');
 }
 
 
