@@ -56,6 +56,20 @@ export async function render(ctx) {
 
   const payments =
     currentDetail.payments || [];
+  
+  const status =
+  String(
+    invoice.status || ''
+  ).toLowerCase();
+
+  const paymentTotal =
+  Number(
+    invoice.payment_total || 0
+  );
+
+  const canVoid =
+  status === 'issued' &&
+  paymentTotal <= 0;
 
   return `
     <div class="toolbar">
@@ -82,6 +96,19 @@ export async function render(ctx) {
           `
           : ''
       }
+
+      ${
+  canVoid
+    ? `
+      <button
+        type="button"
+        class="btn invoice-void"
+      >
+        請求書を取り消す
+      </button>
+    `
+    : ''
+}
     </div>
 
     <div class="panel">
@@ -258,6 +285,9 @@ export async function render(ctx) {
 /**
  * 画面イベントを設定する。
  */
+/**
+ * 画面イベントを設定する。
+ */
 export function bind() {
   const backButton =
     document.querySelector(
@@ -272,8 +302,136 @@ export function bind() {
       }
     );
   }
-}
 
+  const voidButton =
+    document.querySelector(
+      '.invoice-void'
+    );
+
+  if (voidButton) {
+    voidButton.addEventListener(
+      'click',
+      async function () {
+        await voidInvoice_(
+          voidButton
+        );
+      }
+    );
+  }
+}
+/**
+ * 請求書を取り消す。
+ *
+ * @param {HTMLButtonElement} button
+ */
+async function voidInvoice_(button) {
+  const invoice =
+    currentDetail?.invoice || {};
+
+  const invoiceId =
+    String(
+      invoice.invoice_id || ''
+    ).trim();
+
+  if (!invoiceId) {
+    alert(
+      '請求書IDを確認できません。'
+    );
+    return;
+  }
+
+  const reasonInput =
+    window.prompt(
+      [
+        '取消理由を入力してください。',
+        '',
+        '例：請求内容を誤って発行したため'
+      ].join('\n'),
+      ''
+    );
+
+  if (reasonInput === null) {
+    return;
+  }
+
+  const reason =
+    String(
+      reasonInput
+    ).trim();
+
+  if (!reason) {
+    alert(
+      '取消理由を入力してください。'
+    );
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      [
+        'この請求書を取り消します。',
+        '',
+        '請求書番号：' +
+          (
+            invoice.invoice_number ||
+            invoiceId
+          ),
+        '請求先：' +
+          (
+            invoice.payee_name_snapshot ||
+            ''
+          ),
+        '取消理由：' +
+          reason,
+        '',
+        '取り消した請求書は元に戻せません。',
+        '実行してよろしいですか？'
+      ].join('\n')
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const originalText =
+    button.textContent;
+
+  button.disabled = true;
+  button.textContent =
+    '取消処理中...';
+
+  try {
+    await api(
+      'voidInvoice',
+      {
+        invoiceId:
+          invoiceId,
+
+        reason:
+          reason
+      }
+    );
+
+    alert(
+      '請求書を取り消しました。'
+    );
+
+    go('invoices');
+
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      error && error.message
+        ? error.message
+        : '請求書の取消に失敗しました。'
+    );
+
+    button.disabled = false;
+    button.textContent =
+      originalText;
+  }
+}
 
 /**
  * 基本情報を表示する。
