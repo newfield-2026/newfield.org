@@ -241,6 +241,15 @@ export async function render(ctx) {
 
       <button
         type="button"
+        class="btn"
+        id="invoice-issue"
+        style="display:none"
+      >
+        請求書を発行
+      </button>
+
+      <button
+        type="button"
         class="btn primary"
         id="invoice-save"
       >
@@ -276,6 +285,10 @@ export function bind() {
   document
     .querySelector('#invoice-save')
     ?.addEventListener('click', saveDraft_);
+
+  document
+    .querySelector('#invoice-issue')
+    ?.addEventListener('click', issueInvoice_);
 
   document
     .querySelector('#invoice-reset')
@@ -1230,16 +1243,107 @@ async function loadDraft_(invoiceId) {
       addItemRow_();
     }
 
-    showSuccess_(
-      '保存済みの下書きを編集中です。'
-    );
-
     recalc_();
+
+const issueButton =
+  document.querySelector('#invoice-issue');
+
+if (issueButton) {
+  issueButton.style.display = '';
+}
+
+showSuccess_(
+  '保存済みの下書きを編集中です。'
+);
 
   } catch (error) {
     showError_(
       error?.message ||
       '下書きの読み込みに失敗しました。'
     );
+  }
+}
+
+/**
+ * 請求書を発行する。
+ */
+async function issueInvoice_() {
+  clearMessage_();
+
+  if (!currentInvoiceId) {
+    showError_(
+      '先に下書きを保存してください。'
+    );
+    return;
+  }
+
+  const confirmed = window.confirm(
+    'この請求書を発行しますか？\n' +
+    '発行後は請求書番号が採番され、下書き編集はできなくなります。'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const issueButton =
+    document.querySelector('#invoice-issue');
+
+  try {
+    if (issueButton) {
+      issueButton.disabled = true;
+      issueButton.textContent = '発行中…';
+    }
+
+    const result = await api(
+      'issueInvoice',
+      {
+        invoiceId: currentInvoiceId
+      }
+    );
+
+    const invoiceNumber =
+      result.invoice?.invoice_number || '';
+
+    const warning =
+      result.warning || '';
+
+    showSuccess_(
+      warning
+        ? '請求書を発行しました。' +
+          invoiceNumber +
+          '／' +
+          warning
+        : '請求書を発行しました。' +
+          (
+            invoiceNumber
+              ? ' 請求書番号：' +
+                invoiceNumber
+              : ''
+          )
+    );
+
+    if (issueButton) {
+      issueButton.style.display = 'none';
+    }
+
+    const saveButton =
+      document.querySelector('#invoice-save');
+
+    if (saveButton) {
+      saveButton.style.display = 'none';
+    }
+
+  } catch (error) {
+    showError_(
+      error?.message ||
+      '請求書の発行に失敗しました。'
+    );
+
+    if (issueButton) {
+      issueButton.disabled = false;
+      issueButton.textContent =
+        '請求書を発行';
+    }
   }
 }
