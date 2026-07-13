@@ -14,7 +14,8 @@ let currentPayee = null;
  */
 export async function render(ctx) {
   master = await api('getInvoiceCreateMaster');
-
+　currentInvoiceId = ctx?.invoiceId || '';
+  
   const fiscalYear =
     Number(master.fiscalYear) ||
     Number(ctx?.fiscalYear) ||
@@ -350,8 +351,12 @@ export function bind() {
     recalc_
   );
 
+  if (currentInvoiceId) {
+  loadDraft_(currentInvoiceId);
+} else {
   addItemRow_();
   recalc_();
+}
 }
 
 
@@ -1101,4 +1106,140 @@ function formatDateInput_(date) {
   ).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * 保存済み下書きを画面へ読み込む。
+ *
+ * @param {string} invoiceId
+ */
+async function loadDraft_(invoiceId) {
+  try {
+    const data = await api(
+      'getInvoiceDraft',
+      {
+        invoiceId: invoiceId
+      }
+    );
+
+    const invoice = data.invoice || {};
+    const items = data.items || [];
+
+    document.querySelector(
+      '#invoice-type'
+    ).value = invoice.invoice_type || '';
+
+    document.querySelector(
+      '#invoice-payee'
+    ).value =
+      (invoice.payee_source_type || '') +
+      '|' +
+      (invoice.payee_source_id || '');
+
+    document.querySelector(
+      '#invoice-subject'
+    ).value = invoice.subject || '';
+
+    document.querySelector(
+      '#invoice-honorific'
+    ).value =
+      invoice.honorific_snapshot || '様';
+
+    document.querySelector(
+      '#invoice-assigned-to'
+    ).value =
+      invoice.assigned_to ||
+      master.user?.email ||
+      '';
+
+    document.querySelector(
+      '#invoice-issue-date'
+    ).value = invoice.issue_date || '';
+
+    document.querySelector(
+      '#invoice-due-date'
+    ).value = invoice.due_date || '';
+
+    document.querySelector(
+      '#invoice-fiscal-year'
+    ).value =
+      invoice.fiscal_year ||
+      master.fiscalYear ||
+      '';
+
+    document.querySelector(
+      '#invoice-discount'
+    ).value =
+      invoice.discount_amount || 0;
+
+    document.querySelector(
+      '#invoice-public-remarks'
+    ).value =
+      invoice.public_remarks || '';
+
+    document.querySelector(
+      '#invoice-internal-note'
+    ).value =
+      invoice.internal_note || '';
+
+    currentPayee = {
+      type: invoice.payee_source_type || '',
+      id: invoice.payee_source_id || ''
+    };
+
+    const selectedPayee =
+      (master.payees || []).find(function (payee) {
+        return (
+          String(payee.sourceType) ===
+            String(currentPayee.type) &&
+          String(payee.id) ===
+            String(currentPayee.id)
+        );
+      });
+
+    const payeeInfo = document.querySelector(
+      '#invoice-payee-info'
+    );
+
+    if (payeeInfo) {
+      payeeInfo.textContent = selectedPayee
+        ? [
+            selectedPayee.name,
+            selectedPayee.memberType,
+            selectedPayee.phone,
+            selectedPayee.email
+          ]
+            .filter(Boolean)
+            .join(' / ')
+        : '請求先情報を取得できませんでした。';
+    }
+
+    const tbody = document.querySelector(
+      '#invoice-items'
+    );
+
+    if (tbody) {
+      tbody.innerHTML = '';
+    }
+
+    if (items.length) {
+      items.forEach(function (item) {
+        addItemRow_(item);
+      });
+    } else {
+      addItemRow_();
+    }
+
+    showSuccess_(
+      '保存済みの下書きを編集中です。'
+    );
+
+    recalc_();
+
+  } catch (error) {
+    showError_(
+      error?.message ||
+      '下書きの読み込みに失敗しました。'
+    );
+  }
 }
