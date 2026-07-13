@@ -163,88 +163,88 @@ function renderRow_(invoice) {
       </td>
 
       <td>
-        <div
-          style="
-            display:flex;
-            gap:8px;
-            flex-wrap:wrap;
+  <div
+    style="
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    "
+  >
+    ${
+      invoiceId
+        ? `
+          <button
+            type="button"
+            class="btn invoice-detail"
+            data-invoice-id="${escapeAttr_(
+              invoiceId
+            )}"
+          >
+            詳細
+          </button>
+        `
+        : ''
+    }
 
-            ${
-  invoiceId
-    ? `
-      <button
-        type="button"
-        class="btn invoice-detail"
-        data-invoice-id="${escapeAttr_(
-          invoiceId
-        )}"
-      >
-        詳細
-      </button>
-    `
-    : ''
-}
-          "
-        >
-          ${
-            isDraft && invoiceId
-              ? `
-                <button
-                  type="button"
-                  class="btn invoice-edit"
-                  data-invoice-id="${escapeAttr_(
-                    invoiceId
-                  )}"
-                >
-                  編集
-                </button>
-              `
-              : ''
-          }
+    ${
+      isDraft && invoiceId
+        ? `
+          <button
+            type="button"
+            class="btn invoice-edit"
+            data-invoice-id="${escapeAttr_(
+              invoiceId
+            )}"
+          >
+            編集
+          </button>
+        `
+        : ''
+    }
 
-          ${
-            canRegisterPayment
-              ? `
-                <button
-                  type="button"
-                  class="btn primary invoice-payment"
-                  data-invoice-id="${escapeAttr_(
-                    invoiceId
-                  )}"
-                  data-invoice-number="${escapeAttr_(
-                    invoice.invoice_number || ''
-                  )}"
-                  data-payee-name="${escapeAttr_(
-                    invoice.payee_name_snapshot || ''
-                  )}"
-                  data-total="${escapeAttr_(
-                    invoice.total_incl_tax || 0
-                  )}"
-                >
-                  入金登録
-                </button>
-              `
-              : ''
-          }
+    ${
+      canRegisterPayment
+        ? `
+          <button
+            type="button"
+            class="btn primary invoice-payment"
+            data-invoice-id="${escapeAttr_(
+              invoiceId
+            )}"
+            data-invoice-number="${escapeAttr_(
+              invoice.invoice_number || ''
+            )}"
+            data-payee-name="${escapeAttr_(
+              invoice.payee_name_snapshot || ''
+            )}"
+            data-total="${escapeAttr_(
+              invoice.total_incl_tax || 0
+            )}"
+          >
+            入金登録
+          </button>
+        `
+        : ''
+    }
 
-          ${
-            pdfUrl
-              ? `
-                <a
-                  class="btn"
-                  href="${escapeAttr_(
-                    pdfUrl
-                  )}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  PDFを開く
-                </a>
-              `
-              : ''
-          }
-        </div>
-      </td>
+    ${
+      pdfUrl
+        ? `
+          <a
+            class="btn"
+            href="${escapeAttr_(
+              pdfUrl
+            )}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            PDFを開く
+          </a>
+        `
+        : ''
+    }
+  </div>
+</td>
     </tr>
   `;
 }
