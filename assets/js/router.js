@@ -3,6 +3,7 @@ export const routes = {
   members: '会員・請求先',
   invoices: '請求書一覧',
   invoiceCreate: '請求書新規作成',
+  invoiceDetail: '請求書詳細',
   annualFees: '年会費一括作成',
   payments: '入金管理',
   invoiceSettings: '請求書設定',
