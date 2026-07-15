@@ -22,10 +22,75 @@ export async function render(ctx) {
     }
   );
 
-  currentItems =
+ currentItems =
+  (
     data.items ||
     data.invoices ||
-    [];
+    []
+  ).slice().sort(
+    function (a, b) {
+      const numberA =
+        String(
+          a.invoice_number ||
+          ''
+        );
+
+      const numberB =
+        String(
+          b.invoice_number ||
+          ''
+        );
+
+      const isDraftA =
+        !numberA;
+
+      const isDraftB =
+        !numberB;
+
+      if (
+        isDraftA &&
+        !isDraftB
+      ) {
+        return 1;
+      }
+
+      if (
+        !isDraftA &&
+        isDraftB
+      ) {
+        return -1;
+      }
+
+      if (
+        isDraftA &&
+        isDraftB
+      ) {
+        const dateA =
+          new Date(
+            a.updated_at ||
+            a.created_at ||
+            0
+          ).getTime();
+
+        const dateB =
+          new Date(
+            b.updated_at ||
+            b.created_at ||
+            0
+          ).getTime();
+
+        return dateB - dateA;
+      }
+
+      return numberB.localeCompare(
+        numberA,
+        'ja',
+        {
+          numeric: true
+        }
+      );
+    }
+  );
 
   return `
     <div class="toolbar">
