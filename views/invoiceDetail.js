@@ -71,6 +71,9 @@ export async function render(ctx) {
   status === 'issued' &&
   paymentTotal <= 0;
 
+  const canSend =
+  status === 'issued';
+
   return `
     <div class="toolbar">
       <button
@@ -97,6 +100,18 @@ export async function render(ctx) {
           : ''
       }
 
+      ${
+        canSend
+          ? `
+            <button
+              type="button"
+              class="btn primary invoice-send"
+            >
+              送付登録
+            </button>
+          `
+          : ''
+      }
       ${
   canVoid
     ? `
