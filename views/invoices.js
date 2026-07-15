@@ -7,7 +7,6 @@ import { go } from '../assets/js/router.js';
 
 let currentItems = [];
 
-
 /**
  * 請求書一覧を表示する。
  *
