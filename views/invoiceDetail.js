@@ -156,21 +156,13 @@ export async function render(ctx) {
         ? `
           <div
             id="invoice-send-panel"
-            class="panel"
-            style="display:none; margin-bottom:16px;"
+            class="panel send-panel"
+            style="display:none;"
           >
             <h2>送付登録</h2>
 
             <form id="invoice-send-form">
-              <div
-                style="
-                  display:grid;
-                  grid-template-columns:
-                    repeat(auto-fit, minmax(220px, 1fr));
-                  gap:16px;
-                  margin-top:12px;
-                "
-              >
+              <div class="form-grid">
                 <div>
                   <label class="muted" for="invoice-send-method">
                     送付方法
@@ -217,7 +209,7 @@ export async function render(ctx) {
                 </div>
               </div>
 
-              <div style="margin-top:16px;">
+              <div class="form-field">
                 <label class="muted" for="invoice-send-remarks">
                   備考
                 </label>
@@ -226,16 +218,22 @@ export async function render(ctx) {
                   name="remarks"
                   class="invoice-send-remarks"
                   rows="3"
-                  style="width:100%; margin-top:6px;"
                 ></textarea>
               </div>
 
-              <div style="margin-top:16px;">
+              <div class="form-field form-actions">
                 <button
                   type="submit"
                   class="btn primary invoice-send-submit"
                 >
                   登録する
+                </button>
+
+                <button
+                  type="button"
+                  class="btn invoice-send-cancel"
+                >
+                  キャンセル
                 </button>
               </div>
             </form>
@@ -296,11 +294,8 @@ export async function render(ctx) {
           )
         )}
 
-        ${renderInfo_(
-          '送付状態',
-          getSendStatusLabel_(
-            invoice.send_status
-          )
+        ${renderSendStatusBadge_(
+          invoice.send_status
         )}
 
         ${renderInfo_(
@@ -503,12 +498,27 @@ function bindSendRegistration_() {
       '#invoice-send-form'
     );
 
+  const cancelButton =
+    document.querySelector(
+      '.invoice-send-cancel'
+    );
+
   if (
     !sendButton ||
     !formWrapper ||
     !form
   ) {
     return;
+  }
+
+  if (cancelButton) {
+    cancelButton.addEventListener(
+      'click',
+      function (event) {
+        event.preventDefault();
+        formWrapper.style.display = 'none';
+      }
+    );
   }
 
   sendButton.addEventListener(
@@ -895,6 +905,40 @@ function getSendStatusLabel_(sendStatus) {
   }
 
   return sendStatus || '未登録';
+}
+
+/**
+ * 送付状態をバッジ表示する。
+ *
+ * @param {*} sendStatus
+ * @return {string}
+ */
+function renderSendStatusBadge_(sendStatus) {
+  const normalized =
+    String(sendStatus || '')
+      .trim()
+      .toLowerCase();
+
+  let badgeClass = 'badge-none';
+
+  if (normalized === 'sent_postal') {
+    badgeClass = 'badge-sent-postal';
+  } else if (normalized === 'sent_line') {
+    badgeClass = 'badge-sent-line';
+  } else if (normalized === 'resent') {
+    badgeClass = 'badge-resent';
+  }
+
+  return `
+    <div>
+      <div class="muted">送付状態</div>
+      <div style="margin-top:6px;">
+        <span class="badge ${badgeClass}">
+          ${esc(getSendStatusLabel_(sendStatus))}
+        </span>
+      </div>
+    </div>
+  `;
 }
 
 /**
