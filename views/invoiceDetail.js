@@ -9,6 +9,8 @@ import { go } from '../assets/js/router.js';
 
 
 let currentDetail = null;
+let currentSendMessage = '';
+let lastRenderedInvoiceId = '';
 
 
 /**
@@ -22,6 +24,12 @@ export async function render(ctx) {
     String(
       ctx.invoiceId || ''
     ).trim();
+
+  if (lastRenderedInvoiceId && lastRenderedInvoiceId !== invoiceId) {
+    currentSendMessage = '';
+  }
+
+  lastRenderedInvoiceId = invoiceId;
 
   if (!invoiceId) {
     return `
@@ -56,6 +64,13 @@ export async function render(ctx) {
 
   const payments =
     currentDetail.payments || [];
+
+  const sendLogs =
+    Array.isArray(
+      currentDetail.sendLogs
+    )
+      ? currentDetail.sendLogs
+      : [];
   
   const status =
   String(
@@ -126,6 +141,109 @@ export async function render(ctx) {
 }
     </div>
 
+    ${
+      currentSendMessage
+        ? `
+          <div class="success" style="margin-bottom:12px;">
+            ${esc(currentSendMessage)}
+          </div>
+        `
+        : ''
+    }
+
+    ${
+      canSend
+        ? `
+          <div
+            id="invoice-send-panel"
+            class="panel"
+            style="display:none; margin-bottom:16px;"
+          >
+            <h2>送付登録</h2>
+
+            <form id="invoice-send-form">
+              <div
+                style="
+                  display:grid;
+                  grid-template-columns:
+                    repeat(auto-fit, minmax(220px, 1fr));
+                  gap:16px;
+                  margin-top:12px;
+                "
+              >
+                <div>
+                  <label class="muted" for="invoice-send-method">
+                    送付方法
+                  </label>
+                  <select
+                    id="invoice-send-method"
+                    name="send_method"
+                    class="invoice-send-method"
+                    required
+                  >
+                    <option value="postal">郵送</option>
+                    <option value="line">LINE</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="muted" for="invoice-send-date">
+                    送付日
+                  </label>
+                  <input
+                    id="invoice-send-date"
+                    name="sent_at"
+                    type="date"
+                    class="invoice-send-date"
+                    value="${escapeAttr_(getTodayString_())}"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label class="muted" for="invoice-send-destination">
+                    送付先名
+                  </label>
+                  <input
+                    id="invoice-send-destination"
+                    name="destination_name"
+                    type="text"
+                    class="invoice-send-destination"
+                    value="${escapeAttr_(
+                      invoice.payee_name_snapshot || ''
+                    )}"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style="margin-top:16px;">
+                <label class="muted" for="invoice-send-remarks">
+                  備考
+                </label>
+                <textarea
+                  id="invoice-send-remarks"
+                  name="remarks"
+                  class="invoice-send-remarks"
+                  rows="3"
+                  style="width:100%; margin-top:6px;"
+                ></textarea>
+              </div>
+
+              <div style="margin-top:16px;">
+                <button
+                  type="submit"
+                  class="btn primary invoice-send-submit"
+                >
+                  登録する
+                </button>
+              </div>
+            </form>
+          </div>
+        `
+        : ''
+    }
+
     <div class="panel">
       <h2>
         ${esc(
@@ -175,6 +293,13 @@ export async function render(ctx) {
           getStatusLabel_(
             invoice.status,
             invoice.payment_status
+          )
+        )}
+
+        ${renderInfo_(
+          '送付状態',
+          getSendStatusLabel_(
+            invoice.send_status
           )
         )}
 
@@ -262,6 +387,28 @@ export async function render(ctx) {
       </table>
     </div>
 
+    <div class="panel table-wrap">
+      <h2>送付履歴</h2>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>送付方法</th>
+            <th>送付日</th>
+            <th>送付先名</th>
+            <th>再送回数</th>
+            <th>備考</th>
+            <th>登録者</th>
+            <th>登録日時</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${renderSendLogRows_(sendLogs)}
+        </tbody>
+      </table>
+    </div>
+
     ${
       invoice.public_remarks
         ? `
@@ -333,6 +480,190 @@ export function bind() {
       }
     );
   }
+
+  bindSendRegistration_();
+}
+
+/**
+ * 送付登録のイベントを設定する。
+ */
+function bindSendRegistration_() {
+  const sendButton =
+    document.querySelector(
+      '.invoice-send'
+    );
+
+  const formWrapper =
+    document.querySelector(
+      '#invoice-send-panel'
+    );
+
+  const form =
+    document.querySelector(
+      '#invoice-send-form'
+    );
+
+  if (
+    !sendButton ||
+    !formWrapper ||
+    !form
+  ) {
+    return;
+  }
+
+  sendButton.addEventListener(
+    'click',
+    function (event) {
+      event.preventDefault();
+
+      const isVisible =
+        formWrapper.style.display !==
+        'none';
+
+      formWrapper.style.display =
+        isVisible ? 'none' : 'block';
+
+      if (!isVisible) {
+        const invoice =
+          currentDetail?.invoice || {};
+
+        const destinationInput =
+          document.querySelector(
+            '#invoice-send-destination'
+          );
+
+        const dateInput =
+          document.querySelector(
+            '#invoice-send-date'
+          );
+
+        const methodSelect =
+          document.querySelector(
+            '#invoice-send-method'
+          );
+
+        const remarksInput =
+          document.querySelector(
+            '#invoice-send-remarks'
+          );
+
+        if (destinationInput) {
+          destinationInput.value =
+            String(
+              invoice.payee_name_snapshot ||
+                ''
+            ).trim();
+        }
+
+        if (dateInput) {
+          dateInput.value =
+            getTodayString_();
+        }
+
+        if (methodSelect) {
+          methodSelect.value =
+            'postal';
+        }
+
+        if (remarksInput) {
+          remarksInput.value = '';
+        }
+      }
+    }
+  );
+
+  form.addEventListener(
+    'submit',
+    async function (event) {
+      event.preventDefault();
+
+      const invoice =
+        currentDetail?.invoice || {};
+
+      const invoiceId =
+        String(
+          invoice.invoice_id || ''
+        ).trim();
+
+      const submitButton =
+        document.querySelector(
+          '.invoice-send-submit'
+        );
+
+      if (!invoiceId) {
+        alert('請求書IDを確認できません。');
+        return;
+      }
+
+      const originalText =
+        sendButton.textContent;
+
+      sendButton.disabled = true;
+      sendButton.textContent =
+        '登録中...';
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent =
+          '登録中...';
+      }
+
+      try {
+        const formData =
+          new FormData(form);
+
+        const payload = {
+          invoice_id: invoiceId,
+          send_method:
+            formData.get('send_method') ||
+            'postal',
+          sent_at:
+            formData.get('sent_at') ||
+            getTodayString_(),
+          destination_name:
+            String(
+              formData.get('destination_name') ||
+                ''
+            ).trim(),
+          remarks:
+            String(
+              formData.get('remarks') || ''
+            ).trim()
+        };
+
+        await api(
+          'registerInvoiceSend',
+          payload
+        );
+
+        currentSendMessage =
+          '送付登録を完了しました。';
+
+        go('invoiceDetail', {
+          invoiceId: invoiceId,
+          _ts: Date.now()
+        });
+      } catch (error) {
+        console.error(error);
+
+        alert(
+          error && error.message
+            ? error.message
+            : '送付登録に失敗しました。'
+        );
+
+        sendButton.disabled = false;
+        sendButton.textContent =
+          originalText;
+
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent =
+            '登録する';
+        }
+      }
+    }
+  );
 }
 /**
  * 請求書を取り消す。
@@ -446,6 +777,165 @@ async function voidInvoice_(button) {
     button.textContent =
       originalText;
   }
+}
+
+/**
+ * 送付履歴行を表示する。
+ *
+ * @param {Array} sendLogs
+ * @return {string}
+ */
+function renderSendLogRows_(sendLogs) {
+  if (!sendLogs.length) {
+    return `
+      <tr>
+        <td
+          colspan="7"
+          class="muted"
+        >
+          送付履歴はありません。
+        </td>
+      </tr>
+    `;
+  }
+
+  return sendLogs
+    .slice()
+    .sort(function (a, b) {
+      const dateA =
+        new Date(
+          a.created_at || 0
+        ).getTime();
+
+      const dateB =
+        new Date(
+          b.created_at || 0
+        ).getTime();
+
+      return dateB - dateA;
+    })
+    .map(function (log) {
+      return `
+        <tr>
+          <td>
+            ${esc(
+              getSendMethodLabel_(
+                log.send_method
+              )
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              formatDate_(
+                log.sent_at
+              )
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              log.destination_name || ''
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              log.resend_count || 0
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              log.remarks || ''
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              log.sent_by || ''
+            )}
+          </td>
+
+          <td>
+            ${esc(
+              formatDate_(
+                log.created_at
+              )
+            )}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+/**
+ * 送付状態の表示名を返す。
+ *
+ * @param {*} sendStatus
+ * @return {string}
+ */
+function getSendStatusLabel_(sendStatus) {
+  const normalized =
+    String(sendStatus || '')
+      .trim()
+      .toLowerCase();
+
+  if (normalized === 'sent_postal') {
+    return '郵送済み';
+  }
+
+  if (normalized === 'sent_line') {
+    return 'LINE送信済み';
+  }
+
+  if (normalized === 'resent') {
+    return '再送済み';
+  }
+
+  return sendStatus || '未登録';
+}
+
+/**
+ * 送付方法の表示名を返す。
+ *
+ * @param {*} sendMethod
+ * @return {string}
+ */
+function getSendMethodLabel_(sendMethod) {
+  const normalized =
+    String(sendMethod || '')
+      .trim()
+      .toLowerCase();
+
+  if (normalized === 'postal') {
+    return '郵送';
+  }
+
+  if (normalized === 'line') {
+    return 'LINE';
+  }
+
+  return sendMethod || '―';
+}
+
+/**
+ * 今日の日付をyyyy-MM-dd形式で返す。
+ *
+ * @return {string}
+ */
+function getTodayString_() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0');
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0');
+
+  return [year, month, day].join('-');
 }
 
 /**
