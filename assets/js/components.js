@@ -170,6 +170,10 @@ export function layout(user, body) {
     'N'
   ).toUpperCase();
 
+  const pageTitle =
+    routes[currentRoute()] ||
+    'NFO請求書管理';
+
   return `
     <div class="layout">
       <aside class="sidebar" id="app-sidebar">
@@ -242,34 +246,36 @@ export function layout(user, body) {
 
       <main class="main">
         <header class="topbar">
-          <button
-            type="button"
-            class="mobile-menu-button"
-            aria-label="メニューを開く"
-            aria-expanded="false"
-            aria-controls="app-sidebar"
-            onclick="window.__nfoToggleSidebar && window.__nfoToggleSidebar()"
-          >
-            ${HAMBURGER_ICON}
-          </button>
+          <div class="topbar-title">
+            <button
+              type="button"
+              class="mobile-menu-button"
+              aria-label="メニューを開く"
+              aria-expanded="false"
+              aria-controls="app-sidebar"
+              onclick="window.__nfoToggleSidebar && window.__nfoToggleSidebar()"
+            >
+              ${HAMBURGER_ICON}
+            </button>
 
-          <strong>
-            ${
-              routes[currentRoute()] ||
-              '管理者サイト'
-            }
-          </strong>
+            <div class="topbar-heading">
+              <div class="topbar-page-title">
+                ${esc(pageTitle)}
+              </div>
+            </div>
+          </div>
 
-          <span class="muted">
-            ${
-              esc(
-                user.displayName ||
-                user.email
-              )
-            }
-            ｜
-            ${esc(user.role)}
-          </span>
+          <div class="topbar-actions">
+            <div class="topbar-user">
+              <span class="topbar-user__avatar" aria-hidden="true">
+                ${avatarInitial}
+              </span>
+
+              <span class="topbar-user__name">
+                ${esc(userName)}
+              </span>
+            </div>
+          </div>
         </header>
 
         <section class="content">

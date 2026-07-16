@@ -1000,3 +1000,114 @@
     font-weight:600;
   }
 }
+
+/* ==========================================================================
+   共通ヘッダー (.topbar) Quiet Precision再設計
+   既存の.topbar基本ルール(line 92, background:#fff等)を後勝ちで上書きする形で追加。
+   旧.topbar strong/.topbar .muted(モバイルドロワー節、行743付近)は
+   新マークアップに一致しなくなるが、削除せず残す(無害な未使用ルール)。
+   ========================================================================== */
+
+.topbar{
+  height:var(--header-height);
+  min-height:var(--header-height);
+  background:var(--color-surface);
+  border-bottom:1px solid var(--color-border);
+  box-shadow:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:0 24px;
+  flex-shrink:0;
+  min-width:0;
+}
+
+.topbar-title{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  flex:1;
+}
+
+.topbar-heading{
+  min-width:0;
+  flex:1;
+}
+
+.topbar-page-title{
+  font-size:21px;
+  font-weight:700;
+  line-height:1.3;
+  color:var(--color-text-primary);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.topbar-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-shrink:0;
+  min-width:0;
+}
+
+.topbar-user{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  max-width:220px;
+  min-width:0;
+  padding:4px 8px;
+  border-radius:var(--radius-md);
+  background:transparent;
+  cursor:default;
+}
+
+.topbar-user__avatar{
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  background:var(--color-primary-soft);
+  color:var(--color-primary);
+  font-size:12px;
+  font-weight:700;
+  display:grid;
+  place-items:center;
+  flex-shrink:0;
+}
+
+.topbar-user__name{
+  font-size:13px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  min-width:0;
+}
+
+@media(max-width:900px){
+  .topbar{
+    padding:0 12px;
+    gap:8px;
+  }
+
+  .topbar-title{
+    width:100%;
+  }
+
+  .topbar-heading{
+    min-width:0;
+  }
+
+  .topbar-page-title{
+    font-size:18px;
+  }
+
+  .topbar-actions{
+    display:none;
+  }
+}
