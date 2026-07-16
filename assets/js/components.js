@@ -49,6 +49,90 @@ function navIcon(route) {
 }
 
 
+const HAMBURGER_ICON = `
+  <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+    <path d="M3 5.5h14M3 10h14M3 14.5h14"></path>
+  </svg>
+`;
+
+
+const CLOSE_ICON = `
+  <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+    <path d="M5 5l10 10M15 5L5 15"></path>
+  </svg>
+`;
+
+
+function openSidebar() {
+  document.body.classList.add('is-sidebar-open');
+
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) {
+    overlay.hidden = false;
+  }
+
+  const button = document.querySelector('.mobile-menu-button');
+  if (button) {
+    button.setAttribute('aria-expanded', 'true');
+  }
+
+  const closeButton = document.querySelector('.mobile-menu-close');
+  if (closeButton) {
+    closeButton.focus();
+  }
+}
+
+
+function closeSidebar() {
+  document.body.classList.remove('is-sidebar-open');
+
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) {
+    overlay.hidden = true;
+  }
+
+  const button = document.querySelector('.mobile-menu-button');
+  if (button) {
+    button.setAttribute('aria-expanded', 'false');
+    button.focus();
+  }
+}
+
+
+function toggleSidebar() {
+  if (document.body.classList.contains('is-sidebar-open')) {
+    closeSidebar();
+  } else {
+    openSidebar();
+  }
+}
+
+
+window.__nfoOpenSidebar = openSidebar;
+window.__nfoCloseSidebar = closeSidebar;
+window.__nfoToggleSidebar = toggleSidebar;
+
+
+addEventListener('keydown', function (event) {
+  if (
+    event.key === 'Escape' &&
+    document.body.classList.contains('is-sidebar-open')
+  ) {
+    closeSidebar();
+  }
+});
+
+
+addEventListener('resize', function () {
+  if (
+    innerWidth >= 901 &&
+    document.body.classList.contains('is-sidebar-open')
+  ) {
+    closeSidebar();
+  }
+});
+
+
 export function layout(user, body) {
   const visibleMenuRoutes = [
     'dashboard',
@@ -88,15 +172,26 @@ export function layout(user, body) {
 
   return `
     <div class="layout">
-      <aside class="sidebar">
+      <aside class="sidebar" id="app-sidebar">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true">
-            NFO
-          </span>
+          <div class="brand-content">
+            <span class="brand-mark" aria-hidden="true">
+              NFO
+            </span>
 
-          <span class="brand-name">
-            NFO請求書管理
-          </span>
+            <span class="brand-name">
+              NFO請求書管理
+            </span>
+          </div>
+
+          <button
+            type="button"
+            class="mobile-menu-close"
+            aria-label="メニューを閉じる"
+            onclick="window.__nfoCloseSidebar && window.__nfoCloseSidebar()"
+          >
+            ${CLOSE_ICON}
+          </button>
         </div>
 
         <nav class="nav">
@@ -111,6 +206,7 @@ export function layout(user, body) {
                         : ''
                     }"
                     href="#/${route}"
+                    onclick="window.__nfoCloseSidebar && window.__nfoCloseSidebar()"
                   >
                     <span class="nav-icon" aria-hidden="true">
                       ${navIcon(route)}
@@ -142,8 +238,21 @@ export function layout(user, body) {
         </div>
       </aside>
 
+      <div class="sidebar-overlay" hidden onclick="window.__nfoCloseSidebar && window.__nfoCloseSidebar()"></div>
+
       <main class="main">
         <header class="topbar">
+          <button
+            type="button"
+            class="mobile-menu-button"
+            aria-label="メニューを開く"
+            aria-expanded="false"
+            aria-controls="app-sidebar"
+            onclick="window.__nfoToggleSidebar && window.__nfoToggleSidebar()"
+          >
+            ${HAMBURGER_ICON}
+          </button>
+
           <strong>
             ${
               routes[currentRoute()] ||
