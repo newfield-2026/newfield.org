@@ -1361,3 +1361,229 @@
     font-size:16px;
   }
 }
+
+/* ==========================================================================
+   請求書一覧 (Quiet Precision 本格再設計)
+   既存の.invoice-list-desktop/.invoice-list-mobile/.invoice-card系(モバイル)は
+   クラス名を維持したまま上書き。PC版テーブルは.invoice-tableを追加して
+   .table本体の共有スタイルは変更しない。
+   ========================================================================== */
+
+.invoice-list-view{
+  width:100%;
+  max-width:var(--content-max-width);
+  min-width:0;
+  margin:0 auto;
+  box-sizing:border-box;
+}
+
+.invoice-list-intro{
+  min-width:0;
+  font-size:14px;
+  color:var(--color-text-secondary);
+  margin-bottom:16px;
+}
+
+.invoice-list-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:12px;
+}
+
+.invoice-list-toolbar__filters{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  flex:1;
+}
+
+.invoice-list-toolbar__actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.invoice-list-toolbar__actions .btn{
+  white-space:nowrap;
+}
+
+.invoice-list-search{
+  width:auto;
+  min-width:220px;
+  max-width:320px;
+}
+
+.invoice-list-filter{
+  width:auto;
+  min-width:140px;
+}
+
+.invoice-list-count{
+  min-width:0;
+  font-size:12px;
+  color:var(--color-text-muted);
+  margin-bottom:8px;
+}
+
+.invoice-list-desktop{
+  padding:0;
+  overflow:hidden;
+  border-radius:var(--radius-md);
+}
+
+.invoice-table th{
+  background:var(--color-bg);
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+  white-space:nowrap;
+}
+
+.invoice-table th,
+.invoice-table td{
+  padding:14px 16px;
+}
+
+.invoice-table tbody tr:hover{
+  background:#F9FAF9;
+}
+
+.invoice-table__payee{
+  display:block;
+  max-width:220px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-weight:600;
+  color:var(--color-text-primary);
+}
+
+.invoice-table__subject{
+  display:block;
+  max-width:240px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--color-text-secondary);
+}
+
+.invoice-table__number{
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+
+.invoice-table__amount{
+  text-align:right;
+  white-space:nowrap;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:var(--color-text-primary);
+}
+
+.invoice-table__date{
+  white-space:nowrap;
+  color:var(--color-text-secondary);
+}
+
+.invoice-table__date--overdue{
+  color:var(--color-danger);
+}
+
+.invoice-overdue-flag{
+  display:inline-block;
+  margin-left:4px;
+  padding:1px 6px;
+  border-radius:var(--radius-sm);
+  font-size:11px;
+  font-weight:600;
+  color:var(--color-danger);
+  background:var(--color-danger-bg);
+  white-space:nowrap;
+}
+
+.invoice-table__status{
+  white-space:nowrap;
+}
+
+.invoice-table__resend{
+  display:block;
+  margin-top:4px;
+  font-size:11px;
+  color:var(--color-warning);
+  white-space:nowrap;
+}
+
+.invoice-table__actions-inner{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.invoice-table__actions-inner .btn{
+  white-space:nowrap;
+  padding:7px 12px;
+  font-size:13px;
+}
+
+.invoice-list-empty{
+  padding:32px 16px;
+  text-align:center;
+  color:var(--color-text-muted);
+  font-size:13px;
+}
+
+.invoice-list-empty p{
+  margin:0 0 12px;
+}
+
+div.invoice-list-empty{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+}
+
+.invoice-card__resend{
+  display:inline-flex;
+  align-items:center;
+  font-size:11px;
+  font-weight:600;
+  color:var(--color-warning);
+  white-space:nowrap;
+}
+
+.invoice-card__meta-value--overdue{
+  color:var(--color-danger);
+}
+
+@media(max-width:900px){
+  .invoice-list-toolbar{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .invoice-list-toolbar__filters{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .invoice-list-search,
+  .invoice-list-filter{
+    width:100%;
+    min-width:0;
+    max-width:none;
+  }
+
+  .invoice-list-toolbar__actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .invoice-list-toolbar__actions .btn{
+    width:100%;
+  }
+}

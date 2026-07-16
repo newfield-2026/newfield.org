@@ -6,6 +6,20 @@ import {
 import { go } from '../assets/js/router.js';
 
 let currentItems = [];
+let searchTerm = '';
+let statusFilter = 'all';
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'すべて' },
+  { value: 'draft', label: '下書き' },
+  { value: 'issued', label: '発行済み' },
+  { value: 'unpaid', label: '未入金' },
+  { value: 'paid', label: '入金済み' },
+  { value: 'overdue', label: '期限超過' },
+  { value: 'unsent', label: '未送付' },
+  { value: 'sent', label: '送付済み' }
+];
+
 
 /**
  * 請求書一覧を表示する。
@@ -14,12 +28,22 @@ let currentItems = [];
  * @return {Promise<string>}
  */
 export async function render(ctx) {
-  const data = await api(
-    'listInvoices',
-    {
-      fiscalYear: ctx.fiscalYear
-    }
-  );
+  searchTerm = '';
+  statusFilter = 'all';
+
+  let data;
+
+  try {
+    data = await api(
+      'listInvoices',
+      {
+        fiscalYear: ctx.fiscalYear
+      }
+    );
+
+  } catch (error) {
+    return renderError_(error);
+  }
 
  currentItems =
   (
@@ -91,63 +115,375 @@ export async function render(ctx) {
     }
   );
 
+  const filteredItems =
+    getFilteredItems_();
+
   return `
-    <div class="toolbar">
-      <button
-        type="button"
-        class="btn primary"
-        data-go="invoiceCreate"
+    <div class="invoice-list-view">
+      <div class="invoice-list-intro">
+        請求書の発行・入金・送付状況を確認できます。
+      </div>
+
+      <div class="invoice-list-toolbar">
+        <div class="invoice-list-toolbar__filters">
+          <input
+            type="search"
+            class="c-input invoice-list-search"
+            placeholder="請求書番号・請求先・件名で検索"
+            value="${escapeAttr_(searchTerm)}"
+          />
+
+          <select class="c-select invoice-list-filter">
+            ${
+              STATUS_FILTERS
+                .map(function (option) {
+                  return `
+                    <option value="${escapeAttr_(option.value)}">
+                      ${esc(option.label)}
+                    </option>
+                  `;
+                })
+                .join('')
+            }
+          </select>
+        </div>
+
+        <div class="invoice-list-toolbar__actions">
+          <button
+            type="button"
+            class="btn primary"
+            data-go="invoiceCreate"
+          >
+            請求書を作成
+          </button>
+
+          <button
+            type="button"
+            class="btn"
+            data-go="annualFees"
+          >
+            年会費を一括作成
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="invoice-list-count"
+        id="invoice-list-count"
       >
-        新規作成
-      </button>
-    </div>
+        ${esc(getCountLabel_(filteredItems))}
+      </div>
 
-    <div class="invoice-list-desktop panel table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>番号</th>
-            <th>請求先</th>
-            <th>件名</th>
-            <th>金額</th>
-            <th>状態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
+      <div class="invoice-list-desktop panel table-wrap">
+        <table class="table invoice-table">
+          <thead>
+            <tr>
+              <th>請求先</th>
+              <th>請求書番号</th>
+              <th>件名</th>
+              <th>金額</th>
+              <th>発行日</th>
+              <th>支払期限</th>
+              <th>請求状態</th>
+              <th>入金状態</th>
+              <th>送付状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          ${renderRows_()}
-        </tbody>
-      </table>
-    </div>
+          <tbody id="invoice-table-body">
+            ${renderRows_(filteredItems)}
+          </tbody>
+        </table>
+      </div>
 
-    <div class="invoice-list-mobile">
-      ${renderCards_()}
+      <div class="invoice-list-mobile">
+        <div id="invoice-card-list">
+          ${renderCards_(filteredItems)}
+        </div>
+      </div>
     </div>
   `;
 }
 
 
 /**
- * 請求書一覧の行を作る。
+ * 検索語・状態フィルターを適用したcurrentItemsを返す。
+ * currentItems自体は変更しない。
  *
+ * @return {Array}
+ */
+function getFilteredItems_() {
+  const term =
+    searchTerm.trim().toLowerCase();
+
+  return currentItems.filter(function (invoice) {
+    return (
+      invoiceMatchesSearch_(invoice, term) &&
+      invoiceMatchesFilter_(invoice, statusFilter)
+    );
+  });
+}
+
+
+/**
+ * 検索語に一致するか判定する（請求書番号・請求先・件名が対象）。
+ *
+ * @param {Object} invoice
+ * @param {string} term
+ * @return {boolean}
+ */
+function invoiceMatchesSearch_(invoice, term) {
+  if (!term) {
+    return true;
+  }
+
+  const haystack =
+    [
+      invoice.invoice_number,
+      invoice.payee_name_snapshot,
+      invoice.subject
+    ]
+      .map(function (value) {
+        return String(value || '').toLowerCase();
+      })
+      .join(' ');
+
+  return haystack.indexOf(term) >= 0;
+}
+
+
+/**
+ * 状態フィルターに一致するか判定する。
+ *
+ * @param {Object} invoice
+ * @param {string} filterValue
+ * @return {boolean}
+ */
+function invoiceMatchesFilter_(invoice, filterValue) {
+  if (filterValue === 'all') {
+    return true;
+  }
+
+  const status =
+    String(
+      invoice.status || ''
+    ).toLowerCase();
+
+  const paymentStatus =
+    String(
+      invoice.payment_status || ''
+    ).toLowerCase();
+
+  const sendStatus =
+    String(
+      invoice.send_status || ''
+    ).trim().toLowerCase();
+
+  if (filterValue === 'draft') {
+    return status === 'draft';
+  }
+
+  if (filterValue === 'issued') {
+    return status === 'issued';
+  }
+
+  if (filterValue === 'paid') {
+    return (
+      paymentStatus === 'paid' ||
+      paymentStatus === 'overpaid'
+    );
+  }
+
+  if (filterValue === 'unpaid') {
+    return (
+      status === 'issued' &&
+      paymentStatus !== 'paid' &&
+      paymentStatus !== 'overpaid'
+    );
+  }
+
+  if (filterValue === 'overdue') {
+    return isOverdue_(
+      status,
+      paymentStatus,
+      invoice.due_date
+    );
+  }
+
+  if (filterValue === 'unsent') {
+    return (
+      sendStatus !== 'resent' &&
+      sendStatus !== 'sent_postal' &&
+      sendStatus !== 'sent_line'
+    );
+  }
+
+  if (filterValue === 'sent') {
+    return (
+      sendStatus === 'resent' ||
+      sendStatus === 'sent_postal' ||
+      sendStatus === 'sent_line'
+    );
+  }
+
+  return true;
+}
+
+
+/**
+ * 支払期限を過ぎているか判定する
+ * （発行済み・未入金・支払期限が今日より前）。
+ *
+ * @param {string} status
+ * @param {string} paymentStatus
+ * @param {*} dueDate
+ * @return {boolean}
+ */
+function isOverdue_(
+  status,
+  paymentStatus,
+  dueDate
+) {
+  if (status !== 'issued') {
+    return false;
+  }
+
+  if (
+    paymentStatus === 'paid' ||
+    paymentStatus === 'overpaid'
+  ) {
+    return false;
+  }
+
+  if (!dueDate) {
+    return false;
+  }
+
+  const due = new Date(dueDate);
+
+  if (isNaN(due.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+
+  return due.getTime() < today.getTime();
+}
+
+
+/**
+ * 件数表示テキストを作る。
+ *
+ * @param {Array} filteredItems
  * @return {string}
  */
-function renderRows_() {
+function getCountLabel_(filteredItems) {
+  const total = currentItems.length;
+  const filteredCount = filteredItems.length;
+
+  if (!total) {
+    return '0件';
+  }
+
+  if (filteredCount === total) {
+    return total + '件';
+  }
+
+  return total + '件中 ' + filteredCount + '件を表示';
+}
+
+
+/**
+ * 検索・フィルター再適用後、一覧部分だけを再描画する。
+ * ページ全体の再描画は行わない。
+ */
+function refreshList_() {
+  const filteredItems =
+    getFilteredItems_();
+
+  const tbody =
+    document.querySelector('#invoice-table-body');
+
+  if (tbody) {
+    tbody.innerHTML =
+      renderRows_(filteredItems);
+  }
+
+  const cardList =
+    document.querySelector('#invoice-card-list');
+
+  if (cardList) {
+    cardList.innerHTML =
+      renderCards_(filteredItems);
+  }
+
+  const countEl =
+    document.querySelector('#invoice-list-count');
+
+  if (countEl) {
+    countEl.textContent =
+      getCountLabel_(filteredItems);
+  }
+
+  bindDetailButtons_();
+  bindEditButtons_();
+  bindPaymentButtons_();
+}
+
+
+/**
+ * 請求書一覧の行を作る。
+ *
+ * @param {Array} items
+ * @return {string}
+ */
+function renderRows_(items) {
   if (!currentItems.length) {
     return `
       <tr>
         <td
-          colspan="6"
-          class="muted"
+          colspan="10"
+          class="invoice-list-empty"
         >
-          請求書はまだありません。
+          <p>請求書はまだありません。</p>
+
+          <button
+            type="button"
+            class="btn primary"
+            data-go="invoiceCreate"
+          >
+            請求書を作成
+          </button>
         </td>
       </tr>
     `;
   }
 
-  return currentItems
+  if (!items.length) {
+    return `
+      <tr>
+        <td
+          colspan="10"
+          class="invoice-list-empty"
+        >
+          <p>条件に一致する請求書がありません。</p>
+
+          <button
+            type="button"
+            class="btn invoice-list-clear"
+          >
+            検索条件をクリア
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+
+  return items
     .map(function (invoice) {
       return renderRow_(invoice);
     })
@@ -191,15 +527,41 @@ function renderRow_(invoice) {
     paymentStatus !== 'overpaid' &&
     Boolean(invoiceId);
 
-  const statusLabel =
-    getStatusLabel_(
+  const resendCount =
+    Number(
+      invoice.resend_count || 0
+    );
+
+  const invoiceStatusBadge =
+    getInvoiceStatusBadge_(status);
+
+  const paymentStatusBadge =
+    getPaymentStatusBadge_(paymentStatus);
+
+  const sendStatusBadge =
+    getSendStatusBadge_(
+      invoice.send_status
+    );
+
+  const dueDateOverdue =
+    isOverdue_(
       status,
-      paymentStatus
+      paymentStatus,
+      invoice.due_date
     );
 
   return `
     <tr>
       <td>
+        <span class="invoice-table__payee">
+          ${esc(
+            invoice.payee_name_snapshot ||
+            ''
+          )}
+        </span>
+      </td>
+
+      <td class="invoice-table__number">
         ${esc(
           invoice.invoice_number ||
           '下書き'
@@ -207,132 +569,194 @@ function renderRow_(invoice) {
       </td>
 
       <td>
-        ${esc(
-          invoice.payee_name_snapshot ||
-          ''
-        )}
+        <span class="invoice-table__subject">
+          ${esc(
+            invoice.subject ||
+            ''
+          )}
+        </span>
       </td>
 
-      <td>
-        ${esc(
-          invoice.subject ||
-          ''
-        )}
-      </td>
-
-      <td>
+      <td class="invoice-table__amount">
         ${yen(
           invoice.total_incl_tax
         )}
       </td>
 
-      <td>
-        ${esc(statusLabel)}
+      <td class="invoice-table__date">
+        ${esc(
+          formatDate_(
+            invoice.issue_date
+          )
+        )}
       </td>
 
-      <td>
-  <div
-    style="
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-    "
-  >
-    ${
-      invoiceId
-        ? `
-          <button
-            type="button"
-            class="btn invoice-detail"
-            data-invoice-id="${escapeAttr_(
-              invoiceId
-            )}"
-          >
-            詳細
-          </button>
-        `
-        : ''
-    }
+      <td class="invoice-table__date${
+        dueDateOverdue
+          ? ' invoice-table__date--overdue'
+          : ''
+      }">
+        ${esc(
+          formatDate_(
+            invoice.due_date
+          )
+        )}
+        ${
+          dueDateOverdue
+            ? '<span class="invoice-overdue-flag">超過</span>'
+            : ''
+        }
+      </td>
 
-    ${
-      isDraft && invoiceId
-        ? `
-          <button
-            type="button"
-            class="btn invoice-edit"
-            data-invoice-id="${escapeAttr_(
-              invoiceId
-            )}"
-          >
-            編集
-          </button>
-        `
-        : ''
-    }
+      <td class="invoice-table__status">
+        <span class="c-badge ${invoiceStatusBadge.className}">
+          ${esc(invoiceStatusBadge.label)}
+        </span>
+      </td>
 
-    ${
-      canRegisterPayment
-        ? `
-          <button
-            type="button"
-            class="btn primary invoice-payment"
-            data-invoice-id="${escapeAttr_(
-              invoiceId
-            )}"
-            data-invoice-number="${escapeAttr_(
-              invoice.invoice_number || ''
-            )}"
-            data-payee-name="${escapeAttr_(
-              invoice.payee_name_snapshot || ''
-            )}"
-            data-total="${escapeAttr_(
-              invoice.total_incl_tax || 0
-            )}"
-          >
-            入金登録
-          </button>
-        `
-        : ''
-    }
+      <td class="invoice-table__status">
+        <span class="c-badge ${paymentStatusBadge.className}">
+          ${esc(paymentStatusBadge.label)}
+        </span>
+      </td>
 
-    ${
-      pdfUrl
-        ? `
-          <a
-            class="btn"
-            href="${escapeAttr_(
-              pdfUrl
-            )}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            PDFを開く
-          </a>
-        `
-        : ''
-    }
-  </div>
-</td>
+      <td class="invoice-table__status">
+        <span class="c-badge ${sendStatusBadge.className}">
+          ${esc(sendStatusBadge.label)}
+        </span>
+
+        ${
+          resendCount >= 1
+            ? `
+              <span class="invoice-table__resend">
+                再送${resendCount}回
+              </span>
+            `
+            : ''
+        }
+      </td>
+
+      <td class="invoice-table__actions">
+        <div class="invoice-table__actions-inner">
+          ${
+            invoiceId
+              ? `
+                <button
+                  type="button"
+                  class="btn invoice-detail"
+                  data-invoice-id="${escapeAttr_(
+                    invoiceId
+                  )}"
+                >
+                  詳細
+                </button>
+              `
+              : ''
+          }
+
+          ${
+            isDraft && invoiceId
+              ? `
+                <button
+                  type="button"
+                  class="btn invoice-edit"
+                  data-invoice-id="${escapeAttr_(
+                    invoiceId
+                  )}"
+                >
+                  編集
+                </button>
+              `
+              : ''
+          }
+
+          ${
+            canRegisterPayment
+              ? `
+                <button
+                  type="button"
+                  class="btn primary invoice-payment"
+                  data-invoice-id="${escapeAttr_(
+                    invoiceId
+                  )}"
+                  data-invoice-number="${escapeAttr_(
+                    invoice.invoice_number || ''
+                  )}"
+                  data-payee-name="${escapeAttr_(
+                    invoice.payee_name_snapshot || ''
+                  )}"
+                  data-total="${escapeAttr_(
+                    invoice.total_incl_tax || 0
+                  )}"
+                >
+                  入金登録
+                </button>
+              `
+              : ''
+          }
+
+          ${
+            pdfUrl
+              ? `
+                <a
+                  class="btn"
+                  href="${escapeAttr_(
+                    pdfUrl
+                  )}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  PDFを開く
+                </a>
+              `
+              : ''
+          }
+        </div>
+      </td>
     </tr>
   `;
 }
 
 
 /**
- * モバイル用カード一覧を作る（PC版と同じcurrentItemsを使用）。
+ * モバイル用カード一覧を作る（PC版と同じfilteredItemsを使用）。
  *
+ * @param {Array} items
  * @return {string}
  */
-function renderCards_() {
+function renderCards_(items) {
   if (!currentItems.length) {
     return `
-      <div class="muted">
-        請求書はまだありません。
+      <div class="invoice-list-empty">
+        <p>請求書はまだありません。</p>
+
+        <button
+          type="button"
+          class="btn primary"
+          data-go="invoiceCreate"
+        >
+          請求書を作成
+        </button>
       </div>
     `;
   }
 
-  return currentItems
+  if (!items.length) {
+    return `
+      <div class="invoice-list-empty">
+        <p>条件に一致する請求書がありません。</p>
+
+        <button
+          type="button"
+          class="btn invoice-list-clear"
+        >
+          検索条件をクリア
+        </button>
+      </div>
+    `;
+  }
+
+  return items
     .map(function (invoice) {
       return renderCard_(invoice);
     })
@@ -386,6 +810,13 @@ function renderCard_(invoice) {
       invoice.send_status
     );
 
+  const dueDateOverdue =
+    isOverdue_(
+      status,
+      paymentStatus,
+      invoice.due_date
+    );
+
   return `
     <div class="invoice-card">
       <div class="invoice-card__top">
@@ -429,6 +860,16 @@ function renderCard_(invoice) {
         <span class="c-badge ${sendStatusBadge.className}">
           ${esc(sendStatusBadge.label)}
         </span>
+
+        ${
+          resendCount >= 1
+            ? `
+              <span class="invoice-card__resend">
+                再送${resendCount}回
+              </span>
+            `
+            : ''
+        }
       </div>
 
       <div class="invoice-card__meta">
@@ -441,23 +882,19 @@ function renderCard_(invoice) {
 
         <div class="invoice-card__meta-row">
           <span class="invoice-card__meta-label">支払期限</span>
-          <span class="invoice-card__meta-value">
+          <span class="invoice-card__meta-value${
+            dueDateOverdue
+              ? ' invoice-card__meta-value--overdue'
+              : ''
+          }">
             ${esc(formatDate_(invoice.due_date))}
+            ${
+              dueDateOverdue
+                ? '<span class="invoice-overdue-flag">超過</span>'
+                : ''
+            }
           </span>
         </div>
-
-        ${
-          resendCount >= 1
-            ? `
-              <div class="invoice-card__meta-row">
-                <span class="invoice-card__meta-label">再送回数</span>
-                <span class="invoice-card__meta-value">
-                  ${resendCount}回
-                </span>
-              </div>
-            `
-            : ''
-        }
       </div>
 
       <div class="invoice-card__actions">
@@ -669,54 +1106,23 @@ function formatDate_(value) {
 
 
 /**
- * 状態表示を作る。
+ * エラー表示を作る。
  *
- * @param {string} status
- * @param {string} paymentStatus
+ * @param {*} error
  * @return {string}
  */
-function getStatusLabel_(
-  status,
-  paymentStatus
-) {
-  let invoiceLabel = status;
+function renderError_(error) {
+  const message =
+    (error && error.message) ||
+    '請求書一覧の読み込みに失敗しました。';
 
-  if (status === 'draft') {
-    invoiceLabel = '下書き';
-
-  } else if (status === 'issued') {
-    invoiceLabel = '発行済み';
-
-  } else if (
-    status === 'void' ||
-    status === 'voided'
-  ) {
-    invoiceLabel = '取消';
-  }
-
-  let paymentLabel = '';
-
-  if (paymentStatus === 'paid') {
-    paymentLabel = '・入金済み';
-
-  } else if (
-    paymentStatus === 'partially_paid' ||
-    paymentStatus === 'partial'
-  ) {
-    paymentLabel = '・一部入金';
-
-  } else if (
-    paymentStatus === 'overpaid'
-  ) {
-    paymentLabel = '・過入金';
-
-  } else if (
-    paymentStatus === 'unpaid'
-  ) {
-    paymentLabel = '・未入金';
-  }
-
-  return invoiceLabel + paymentLabel;
+  return `
+    <div class="invoice-list-view">
+      <div class="c-alert c-alert--danger invoice-list-error">
+        ${esc(message)}
+      </div>
+    </div>
+  `;
 }
 
 
@@ -727,8 +1133,78 @@ export function bind() {
   bindDetailButtons_();
   bindEditButtons_();
   bindPaymentButtons_();
+  bindSearchAndFilter_();
 }
-　/**
+
+
+/**
+ * 検索・フィルター・条件クリアのイベントを設定する。
+ * bind()は画面遷移ごとに1回だけ呼ばれるため、ここでの登録は重複しない。
+ */
+function bindSearchAndFilter_() {
+  const searchInput =
+    document.querySelector('.invoice-list-search');
+
+  const filterSelect =
+    document.querySelector('.invoice-list-filter');
+
+  const view =
+    document.querySelector('.invoice-list-view');
+
+  if (searchInput) {
+    searchInput.addEventListener(
+      'input',
+      function () {
+        searchTerm = searchInput.value || '';
+        refreshList_();
+      }
+    );
+  }
+
+  if (filterSelect) {
+    filterSelect.value = statusFilter;
+
+    filterSelect.addEventListener(
+      'change',
+      function () {
+        statusFilter = filterSelect.value || 'all';
+        refreshList_();
+      }
+    );
+  }
+
+  if (view) {
+    view.addEventListener(
+      'click',
+      function (event) {
+        const clearButton =
+          event.target.closest(
+            '.invoice-list-clear'
+          );
+
+        if (!clearButton) {
+          return;
+        }
+
+        searchTerm = '';
+        statusFilter = 'all';
+
+        if (searchInput) {
+          searchInput.value = '';
+        }
+
+        if (filterSelect) {
+          filterSelect.value = 'all';
+        }
+
+        refreshList_();
+      }
+    );
+  }
+}
+
+
+/**
  * 請求書詳細ボタンを設定する。
  */
 function bindDetailButtons_() {
