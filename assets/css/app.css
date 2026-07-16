@@ -1530,6 +1530,23 @@
   font-size:13px;
 }
 
+@media(min-width:901px){
+  .invoice-table__actions{
+    min-width:260px;
+  }
+
+  .invoice-table__actions-inner{
+    flex-wrap:wrap;
+    gap:6px;
+  }
+
+  .invoice-table__actions-inner .btn{
+    white-space:nowrap;
+    padding:6px 10px;
+    font-size:13px;
+  }
+}
+
 .invoice-list-empty{
   padding:32px 16px;
   text-align:center;
