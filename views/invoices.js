@@ -102,7 +102,7 @@ export async function render(ctx) {
       </button>
     </div>
 
-    <div class="panel table-wrap">
+    <div class="invoice-list-desktop panel table-wrap">
       <table class="table">
         <thead>
           <tr>
@@ -119,6 +119,10 @@ export async function render(ctx) {
           ${renderRows_()}
         </tbody>
       </table>
+    </div>
+
+    <div class="invoice-list-mobile">
+      ${renderCards_()}
     </div>
   `;
 }
@@ -311,6 +315,356 @@ function renderRow_(invoice) {
 </td>
     </tr>
   `;
+}
+
+
+/**
+ * モバイル用カード一覧を作る（PC版と同じcurrentItemsを使用）。
+ *
+ * @return {string}
+ */
+function renderCards_() {
+  if (!currentItems.length) {
+    return `
+      <div class="muted">
+        請求書はまだありません。
+      </div>
+    `;
+  }
+
+  return currentItems
+    .map(function (invoice) {
+      return renderCard_(invoice);
+    })
+    .join('');
+}
+
+
+/**
+ * 請求書1件のモバイルカードを作る。
+ *
+ * @param {Object} invoice
+ * @return {string}
+ */
+function renderCard_(invoice) {
+  const invoiceId =
+    String(
+      invoice.invoice_id || ''
+    );
+
+  const status =
+    String(
+      invoice.status || ''
+    ).toLowerCase();
+
+  const paymentStatus =
+    String(
+      invoice.payment_status || ''
+    ).toLowerCase();
+
+  const pdfUrl =
+    String(
+      invoice.pdf_file_url || ''
+    );
+
+  const isDraft =
+    status === 'draft';
+
+  const resendCount =
+    Number(
+      invoice.resend_count || 0
+    );
+
+  const invoiceStatusBadge =
+    getInvoiceStatusBadge_(status);
+
+  const paymentStatusBadge =
+    getPaymentStatusBadge_(paymentStatus);
+
+  const sendStatusBadge =
+    getSendStatusBadge_(
+      invoice.send_status
+    );
+
+  return `
+    <div class="invoice-card">
+      <div class="invoice-card__top">
+        <div class="invoice-card__payee">
+          ${esc(
+            invoice.payee_name_snapshot ||
+            ''
+          )}
+        </div>
+
+        <div class="invoice-card__amount">
+          ${yen(
+            invoice.total_incl_tax
+          )}
+        </div>
+      </div>
+
+      <div class="invoice-card__number">
+        ${esc(
+          invoice.invoice_number ||
+          '下書き'
+        )}
+      </div>
+
+      <div class="invoice-card__subject">
+        ${esc(
+          invoice.subject ||
+          ''
+        )}
+      </div>
+
+      <div class="invoice-card__badges">
+        <span class="c-badge ${invoiceStatusBadge.className}">
+          ${esc(invoiceStatusBadge.label)}
+        </span>
+
+        <span class="c-badge ${paymentStatusBadge.className}">
+          ${esc(paymentStatusBadge.label)}
+        </span>
+
+        <span class="c-badge ${sendStatusBadge.className}">
+          ${esc(sendStatusBadge.label)}
+        </span>
+      </div>
+
+      <div class="invoice-card__meta">
+        <div class="invoice-card__meta-row">
+          <span class="invoice-card__meta-label">発行日</span>
+          <span class="invoice-card__meta-value">
+            ${esc(formatDate_(invoice.issue_date))}
+          </span>
+        </div>
+
+        <div class="invoice-card__meta-row">
+          <span class="invoice-card__meta-label">支払期限</span>
+          <span class="invoice-card__meta-value">
+            ${esc(formatDate_(invoice.due_date))}
+          </span>
+        </div>
+
+        ${
+          resendCount >= 1
+            ? `
+              <div class="invoice-card__meta-row">
+                <span class="invoice-card__meta-label">再送回数</span>
+                <span class="invoice-card__meta-value">
+                  ${resendCount}回
+                </span>
+              </div>
+            `
+            : ''
+        }
+      </div>
+
+      <div class="invoice-card__actions">
+        ${
+          invoiceId
+            ? `
+              <button
+                type="button"
+                class="btn invoice-detail"
+                data-invoice-id="${escapeAttr_(
+                  invoiceId
+                )}"
+              >
+                詳細
+              </button>
+            `
+            : ''
+        }
+
+        ${
+          pdfUrl
+            ? `
+              <a
+                class="btn"
+                href="${escapeAttr_(
+                  pdfUrl
+                )}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                PDFを開く
+              </a>
+            `
+            : ''
+        }
+
+        ${
+          isDraft && invoiceId
+            ? `
+              <button
+                type="button"
+                class="btn invoice-edit"
+                data-invoice-id="${escapeAttr_(
+                  invoiceId
+                )}"
+              >
+                編集
+              </button>
+            `
+            : ''
+        }
+      </div>
+    </div>
+  `;
+}
+
+
+/**
+ * 請求状態バッジ（.c-badge系）を返す。
+ *
+ * @param {string} status
+ * @return {{className: string, label: string}}
+ */
+function getInvoiceStatusBadge_(status) {
+  if (status === 'draft') {
+    return {
+      className: 'c-badge--draft',
+      label: '下書き'
+    };
+  }
+
+  if (status === 'issued') {
+    return {
+      className: 'c-badge--issued',
+      label: '発行済み'
+    };
+  }
+
+  if (
+    status === 'void' ||
+    status === 'voided'
+  ) {
+    return {
+      className: 'c-badge--cancelled',
+      label: '取消'
+    };
+  }
+
+  return {
+    className: 'c-badge--draft',
+    label: status || '―'
+  };
+}
+
+
+/**
+ * 入金状態バッジ（.c-badge系）を返す。
+ *
+ * @param {string} paymentStatus
+ * @return {{className: string, label: string}}
+ */
+function getPaymentStatusBadge_(paymentStatus) {
+  if (paymentStatus === 'paid') {
+    return {
+      className: 'c-badge--paid',
+      label: '入金済み'
+    };
+  }
+
+  if (
+    paymentStatus === 'partially_paid' ||
+    paymentStatus === 'partial'
+  ) {
+    return {
+      className: 'c-badge--partial',
+      label: '一部入金'
+    };
+  }
+
+  if (paymentStatus === 'overpaid') {
+    return {
+      className: 'c-badge--paid',
+      label: '過入金'
+    };
+  }
+
+  return {
+    className: 'c-badge--unpaid',
+    label: '未入金'
+  };
+}
+
+
+/**
+ * 送付状態バッジ（.c-badge系）を返す。
+ *
+ * @param {*} sendStatus
+ * @return {{className: string, label: string}}
+ */
+function getSendStatusBadge_(sendStatus) {
+  const normalized =
+    String(sendStatus || '')
+      .trim()
+      .toLowerCase();
+
+  if (normalized === 'resent') {
+    return {
+      className: 'c-badge--resent',
+      label: '再送済み'
+    };
+  }
+
+  if (normalized === 'sent_postal') {
+    return {
+      className: 'c-badge--sent',
+      label: '郵送済み'
+    };
+  }
+
+  if (normalized === 'sent_line') {
+    return {
+      className: 'c-badge--sent',
+      label: 'LINE送信済み'
+    };
+  }
+
+  return {
+    className: 'c-badge--unsent',
+    label: '未送付'
+  };
+}
+
+
+/**
+ * 日付をyyyy/MM/dd形式で返す（invoiceDetail.jsのformatDate_と同じ表記）。
+ *
+ * @param {*} value
+ * @return {string}
+ */
+function formatDate_(value) {
+  if (!value) {
+    return '―';
+  }
+
+  const date = new Date(value);
+
+  if (isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  const year = date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, '0');
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(2, '0');
+
+  return [
+    year,
+    month,
+    day
+  ].join('/');
 }
 
 
