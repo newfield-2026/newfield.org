@@ -339,69 +339,93 @@ export async function render(ctx) {
       </div>
     </div>
 
-    <div class="panel table-wrap">
+    <div class="panel">
       <h2>請求明細</h2>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>品目</th>
-            <th>数量</th>
-            <th>単位</th>
-            <th>税込単価</th>
-            <th>金額</th>
-            <th>備考</th>
-          </tr>
-        </thead>
+      <div class="item-list-desktop table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>品目</th>
+              <th>数量</th>
+              <th>単位</th>
+              <th>税込単価</th>
+              <th>金額</th>
+              <th>備考</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          ${renderItemRows_(items)}
-        </tbody>
-      </table>
+          <tbody>
+            ${renderItemRows_(items)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="item-list-mobile">
+        <div class="history-card-list">
+          ${renderItemCards_(items)}
+        </div>
+      </div>
     </div>
 
-    <div class="panel table-wrap">
+    <div class="panel">
       <h2>入金履歴</h2>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>入金日</th>
-            <th>入金額</th>
-            <th>入金方法</th>
-            <th>入金者名</th>
-            <th>備考</th>
-          </tr>
-        </thead>
+      <div class="payment-list-desktop table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>入金日</th>
+              <th>入金額</th>
+              <th>入金方法</th>
+              <th>入金者名</th>
+              <th>備考</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          ${renderPaymentRows_(
-            payments
-          )}
-        </tbody>
-      </table>
+          <tbody>
+            ${renderPaymentRows_(
+              payments
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="payment-list-mobile">
+        <div class="history-card-list">
+          ${renderPaymentCards_(payments)}
+        </div>
+      </div>
     </div>
 
-    <div class="panel table-wrap">
+    <div class="panel">
       <h2>送付履歴</h2>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>送付方法</th>
-            <th>送付日</th>
-            <th>送付先名</th>
-            <th>再送回数</th>
-            <th>備考</th>
-            <th>登録者</th>
-            <th>登録日時</th>
-          </tr>
-        </thead>
+      <div class="send-history-desktop table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>送付方法</th>
+              <th>送付日</th>
+              <th>送付先名</th>
+              <th>再送回数</th>
+              <th>備考</th>
+              <th>登録者</th>
+              <th>登録日時</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          ${renderSendLogRows_(sendLogs)}
-        </tbody>
-      </table>
+          <tbody>
+            ${renderSendLogRows_(sendLogs)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="send-history-mobile">
+        <div class="history-card-list">
+          ${renderSendHistoryCards_(sendLogs)}
+        </div>
+      </div>
     </div>
 
     ${
@@ -881,6 +905,132 @@ function renderSendLogRows_(sendLogs) {
 }
 
 /**
+ * モバイル用の送付履歴カード一覧を作る（sendLogsを複製取得せず共用）。
+ *
+ * @param {Array} sendLogs
+ * @return {string}
+ */
+function renderSendHistoryCards_(sendLogs) {
+  if (!sendLogs.length) {
+    return `
+      <div class="muted">
+        送付履歴はありません。
+      </div>
+    `;
+  }
+
+  return sendLogs
+    .slice()
+    .sort(function (a, b) {
+      const dateA =
+        new Date(
+          a.created_at || 0
+        ).getTime();
+
+      const dateB =
+        new Date(
+          b.created_at || 0
+        ).getTime();
+
+      return dateB - dateA;
+    })
+    .map(function (log) {
+      return renderSendHistoryCard_(log);
+    })
+    .join('');
+}
+
+
+/**
+ * 送付履歴1件のモバイルカードを作る。
+ *
+ * @param {Object} log
+ * @return {string}
+ */
+function renderSendHistoryCard_(log) {
+  const resendCount =
+    Number(
+      log.resend_count || 0
+    );
+
+  const remarks =
+    String(
+      log.remarks || ''
+    ).trim();
+
+  return `
+    <div class="history-card">
+      <div class="history-card__row">
+        <span class="history-card__label">送付日</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            formatDate_(
+              log.sent_at
+            )
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">送付方法</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            getSendMethodLabel_(
+              log.send_method
+            )
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">送付先</span>
+        <span class="history-card__value">
+          ${esc(
+            log.destination_name || ''
+          )}
+        </span>
+      </div>
+
+      ${
+        resendCount >= 1
+          ? `
+            <div class="history-card__row">
+              <span class="history-card__label">再送</span>
+              <span class="history-card__value history-card__value--nowrap history-card__value--resend">
+                再送${resendCount}回
+              </span>
+            </div>
+          `
+          : ''
+      }
+
+      <div class="history-card__row">
+        <span class="history-card__label">登録者</span>
+        <span class="history-card__value">
+          ${esc(
+            log.sent_by || ''
+          )}
+        </span>
+      </div>
+
+      ${
+        remarks
+          ? `
+            <div class="history-card__row">
+              <span class="history-card__label">備考</span>
+              <span class="history-card__value">
+                ${esc(remarks)}
+              </span>
+            </div>
+          `
+          : ''
+      }
+    </div>
+  `;
+}
+
+
+/**
  * 送付状態の表示名を返す。
  *
  * @param {*} sendStatus
@@ -1112,6 +1262,105 @@ function renderItemRows_(items) {
 
 
 /**
+ * モバイル用の請求明細カード一覧を作る（itemsを複製取得せず共用）。
+ *
+ * @param {Array} items
+ * @return {string}
+ */
+function renderItemCards_(items) {
+  if (!items.length) {
+    return `
+      <div class="muted">
+        請求明細はありません。
+      </div>
+    `;
+  }
+
+  return items
+    .map(function (item) {
+      return renderItemCard_(item);
+    })
+    .join('');
+}
+
+
+/**
+ * 請求明細1件のモバイルカードを作る。
+ *
+ * @param {Object} item
+ * @return {string}
+ */
+function renderItemCard_(item) {
+  const remarks =
+    String(
+      item.remarks || ''
+    ).trim();
+
+  return `
+    <div class="history-card">
+      <div class="history-card__row">
+        <span class="history-card__label">品目</span>
+        <span class="history-card__value">
+          ${esc(
+            item.item_name || ''
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">数量</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            item.quantity || ''
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">単位</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            item.unit || ''
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">税込単価</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${yen(
+            item.unit_price_incl_tax
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">金額</span>
+        <span class="history-card__value history-card__value--nowrap history-card__value--strong">
+          ${yen(
+            item.line_total_incl_tax
+          )}
+        </span>
+      </div>
+
+      ${
+        remarks
+          ? `
+            <div class="history-card__row">
+              <span class="history-card__label">備考</span>
+              <span class="history-card__value">
+                ${esc(remarks)}
+              </span>
+            </div>
+          `
+          : ''
+      }
+    </div>
+  `;
+}
+
+
+/**
  * 入金履歴行を表示する。
  *
  * @param {Array} payments
@@ -1188,6 +1437,112 @@ function renderPaymentRows_(
       `;
     })
     .join('');
+}
+
+
+/**
+ * モバイル用の入金履歴カード一覧を作る（paymentsを複製取得せず共用）。
+ *
+ * @param {Array} payments
+ * @return {string}
+ */
+function renderPaymentCards_(payments) {
+  if (!payments.length) {
+    return `
+      <div class="muted">
+        入金履歴はありません。
+      </div>
+    `;
+  }
+
+  return payments
+    .slice()
+    .sort(function (a, b) {
+      const dateA =
+        new Date(
+          a.payment_date || 0
+        ).getTime();
+
+      const dateB =
+        new Date(
+          b.payment_date || 0
+        ).getTime();
+
+      return dateB - dateA;
+    })
+    .map(function (payment) {
+      return renderPaymentCard_(payment);
+    })
+    .join('');
+}
+
+
+/**
+ * 入金履歴1件のモバイルカードを作る。
+ *
+ * @param {Object} payment
+ * @return {string}
+ */
+function renderPaymentCard_(payment) {
+  const remarks =
+    String(
+      payment.remarks || ''
+    ).trim();
+
+  return `
+    <div class="history-card">
+      <div class="history-card__row">
+        <span class="history-card__label">入金日</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            formatDate_(
+              payment.payment_date
+            )
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">入金額</span>
+        <span class="history-card__value history-card__value--nowrap history-card__value--strong">
+          ${yen(
+            payment.amount
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">入金方法</span>
+        <span class="history-card__value history-card__value--nowrap">
+          ${esc(
+            payment.payment_method || ''
+          )}
+        </span>
+      </div>
+
+      <div class="history-card__row">
+        <span class="history-card__label">入金者名</span>
+        <span class="history-card__value">
+          ${esc(
+            payment.payer_name || ''
+          )}
+        </span>
+      </div>
+
+      ${
+        remarks
+          ? `
+            <div class="history-card__row">
+              <span class="history-card__label">備考</span>
+              <span class="history-card__value">
+                ${esc(remarks)}
+              </span>
+            </div>
+          `
+          : ''
+      }
+    </div>
+  `;
 }
 
 
