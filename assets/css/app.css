@@ -1604,3 +1604,365 @@ div.invoice-list-empty{
     width:100%;
   }
 }
+
+/* ==========================================================================
+   請求書詳細 (Quiet Precision 本格再設計)
+   既存の.item-list/.payment-list/.send-history/.history-card系(モバイル)・
+   .send-panel(送付登録フォーム)は維持し、クラス追加や構造的な位置調整のみ行う。
+   ========================================================================== */
+
+.invoice-detail-view{
+  width:100%;
+  max-width:var(--content-max-width);
+  min-width:0;
+  margin:0 auto;
+  box-sizing:border-box;
+}
+
+.invoice-detail-error{
+  margin-bottom:16px;
+}
+
+.invoice-detail-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:16px;
+  min-width:0;
+}
+
+.invoice-detail-toolbar__back{
+  min-width:0;
+}
+
+.invoice-detail-toolbar__back .btn{
+  white-space:nowrap;
+}
+
+.invoice-detail-toolbar__actions{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.invoice-detail-toolbar__actions .btn{
+  white-space:nowrap;
+}
+
+.invoice-detail-message{
+  margin-bottom:16px;
+}
+
+.invoice-detail-summary{
+  display:grid;
+  grid-template-columns:1fr auto;
+  grid-template-areas:
+    "main amount"
+    "statuses statuses"
+    "dates dates";
+  align-items:start;
+  column-gap:16px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  box-shadow:none;
+  padding:20px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.invoice-detail-summary__main{
+  grid-area:main;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.invoice-detail-summary__payee{
+  min-width:0;
+  font-size:18px;
+  font-weight:700;
+  color:var(--color-text-primary);
+  overflow-wrap:anywhere;
+}
+
+.invoice-detail-summary__number{
+  font-size:13px;
+  color:var(--color-text-muted);
+  font-variant-numeric:tabular-nums;
+}
+
+.invoice-detail-summary__amount{
+  grid-area:amount;
+  flex-shrink:0;
+  white-space:nowrap;
+  font-size:30px;
+  font-weight:700;
+  color:var(--color-text-primary);
+  font-variant-numeric:tabular-nums;
+}
+
+.invoice-detail-summary__statuses{
+  grid-area:statuses;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:16px;
+}
+
+.invoice-detail-summary__dates{
+  grid-area:dates;
+  display:flex;
+  flex-wrap:wrap;
+  gap:24px;
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px solid var(--color-border);
+}
+
+.invoice-detail-summary__date{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+
+.invoice-detail-summary__date-label{
+  font-size:12px;
+  color:var(--color-text-muted);
+}
+
+.invoice-detail-summary__date-value{
+  font-size:14px;
+  color:var(--color-text-primary);
+  white-space:nowrap;
+}
+
+.invoice-detail-summary__date-value--overdue{
+  color:var(--color-danger);
+}
+
+.invoice-detail-section{
+  margin-top:20px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  box-shadow:none;
+  padding:20px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.invoice-detail-section__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.invoice-detail-section__title{
+  min-width:0;
+  font-size:17px;
+  font-weight:600;
+  color:var(--color-text-primary);
+}
+
+.invoice-detail-section__subheader{
+  margin-top:20px;
+  margin-bottom:12px;
+  padding-top:16px;
+  border-top:1px solid var(--color-border);
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.invoice-detail-info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px 24px;
+  min-width:0;
+}
+
+.invoice-detail-info-item{
+  min-width:0;
+}
+
+.invoice-detail-info-item__label{
+  font-size:12px;
+  color:var(--color-text-muted);
+  margin-bottom:4px;
+}
+
+.invoice-detail-info-item__value{
+  font-size:14px;
+  color:var(--color-text-primary);
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+.invoice-detail-info-item__value--amount{
+  font-size:20px;
+  font-weight:700;
+  color:var(--color-text-primary);
+  font-variant-numeric:tabular-nums;
+}
+
+.invoice-detail-amount-summary{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:16px 24px;
+  min-width:0;
+}
+
+.invoice-detail-section--admin{
+  margin-top:20px;
+}
+
+.invoice-detail-section--admin .invoice-detail-section__title{
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.invoice-detail-section--admin .invoice-detail-info-item__label,
+.invoice-detail-section--admin .invoice-detail-info-item__value{
+  font-size:12px;
+  color:var(--color-text-muted);
+}
+
+.invoice-detail-danger{
+  margin-top:20px;
+  background:var(--color-danger-bg);
+  border:1px solid var(--color-danger-border);
+  border-radius:var(--radius-md);
+  padding:20px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.invoice-detail-danger .invoice-detail-section__title{
+  color:var(--color-danger);
+}
+
+.invoice-detail-danger__text{
+  margin:0 0 12px;
+  font-size:13px;
+  color:var(--color-text-secondary);
+}
+
+.invoice-detail-danger .btn{
+  color:var(--color-danger);
+  border-color:var(--color-danger-border);
+  background:var(--color-surface);
+  white-space:nowrap;
+}
+
+.invoice-detail-danger .btn:hover{
+  background:var(--color-danger-bg);
+}
+
+.send-panel{
+  min-width:0;
+  box-sizing:border-box;
+}
+
+/* PC版の請求明細・入金履歴・送付履歴テーブルの見た目調整
+   (renderItemRows_/renderPaymentRows_/renderSendLogRows_のHTMLは変更していない) */
+
+.item-list-desktop th,
+.payment-list-desktop th,
+.send-history-desktop th{
+  background:var(--color-bg);
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.item-list-desktop td,
+.payment-list-desktop td,
+.send-history-desktop td{
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+.item-list-desktop tbody tr:hover,
+.payment-list-desktop tbody tr:hover,
+.send-history-desktop tbody tr:hover{
+  background:#F9FAF9;
+}
+
+.item-list-desktop td:nth-child(2),
+.item-list-desktop td:nth-child(4),
+.item-list-desktop td:nth-child(5),
+.item-list-desktop th:nth-child(2),
+.item-list-desktop th:nth-child(4),
+.item-list-desktop th:nth-child(5){
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+.payment-list-desktop td:nth-child(2),
+.payment-list-desktop th:nth-child(2){
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+@media(max-width:900px){
+  .invoice-detail-toolbar{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .invoice-detail-toolbar__actions{
+    justify-content:flex-start;
+  }
+
+  .invoice-detail-toolbar__back .btn,
+  .invoice-detail-toolbar__actions .btn{
+    width:100%;
+  }
+
+  .invoice-detail-summary{
+    grid-template-columns:1fr;
+    grid-template-areas:
+      "amount"
+      "main"
+      "statuses"
+      "dates";
+    padding:16px;
+  }
+
+  .invoice-detail-summary__amount{
+    font-size:26px;
+  }
+
+  .invoice-detail-summary__dates{
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .invoice-detail-section{
+    padding:16px;
+  }
+
+  .invoice-detail-info-grid,
+  .invoice-detail-amount-summary{
+    grid-template-columns:1fr;
+  }
+
+  .invoice-detail-danger{
+    padding:16px;
+  }
+
+  .invoice-detail-danger .btn{
+    width:100%;
+  }
+}

@@ -33,28 +33,35 @@ export async function render(ctx) {
 
   if (!invoiceId) {
     return `
-      <div class="error">
-        請求書IDが指定されていません。
-      </div>
+      <div class="invoice-detail-view">
+        <div class="c-alert c-alert--danger invoice-detail-error">
+          請求書IDが指定されていません。
+        </div>
 
-      <div class="toolbar">
-        <button
-          type="button"
-          class="btn"
-          data-go="invoices"
-        >
-          請求書一覧へ戻る
-        </button>
+        <div class="invoice-detail-toolbar">
+          <button
+            type="button"
+            class="btn"
+            data-go="invoices"
+          >
+            請求書一覧へ戻る
+          </button>
+        </div>
       </div>
     `;
   }
 
-  currentDetail = await api(
-    'getInvoiceDetail',
-    {
-      invoiceId: invoiceId
-    }
-  );
+  try {
+    currentDetail = await api(
+      'getInvoiceDetail',
+      {
+        invoiceId: invoiceId
+      }
+    );
+
+  } catch (error) {
+    return renderError_(error);
+  }
 
   const invoice =
     currentDetail.invoice || {};
@@ -71,401 +78,583 @@ export async function render(ctx) {
     )
       ? currentDetail.sendLogs
       : [];
-  
+
   const status =
-  String(
-    invoice.status || ''
-  ).toLowerCase();
+    String(
+      invoice.status || ''
+    ).toLowerCase();
+
+  const paymentStatus =
+    String(
+      invoice.payment_status || ''
+    ).toLowerCase();
 
   const paymentTotal =
-  Number(
-    invoice.payment_total || 0
-  );
+    Number(
+      invoice.payment_total || 0
+    );
+
+  const isDraft =
+    status === 'draft';
 
   const canVoid =
-  status === 'issued' &&
-  paymentTotal <= 0;
+    status === 'issued' &&
+    paymentTotal <= 0;
 
   const canSend =
-  status === 'issued';
+    status === 'issued';
+
+  const dueDateOverdue =
+    isOverdue_(
+      status,
+      paymentStatus,
+      invoice.due_date
+    );
+
+  const invoiceStatusBadge =
+    getInvoiceStatusBadge_(status);
+
+  const paymentStatusBadge =
+    getPaymentStatusBadge_(paymentStatus);
+
+  const invoiceNumberLabel =
+    invoice.invoice_number ||
+    (isDraft ? '下書き' : '請求書詳細');
+
+  const primaryAction =
+    isDraft
+      ? 'edit'
+      : canSend
+        ? 'send'
+        : (invoice.pdf_file_url ? 'pdf' : '');
 
   return `
-    <div class="toolbar">
-      <button
-        type="button"
-        class="btn invoice-detail-back"
-      >
-        請求書一覧へ戻る
-      </button>
+    <div class="invoice-detail-view">
+      <div class="invoice-detail-toolbar">
+        <div class="invoice-detail-toolbar__back">
+          <button
+            type="button"
+            class="btn invoice-detail-back"
+          >
+            請求書一覧へ戻る
+          </button>
+        </div>
+
+        <div class="invoice-detail-toolbar__actions">
+          ${
+            invoice.pdf_file_url
+              ? `
+                <a
+                  class="btn${
+                    primaryAction === 'pdf'
+                      ? ' primary'
+                      : ''
+                  }"
+                  href="${escapeAttr_(
+                    invoice.pdf_file_url
+                  )}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  PDFを新しいタブで開く
+                </a>
+              `
+              : ''
+          }
+
+          ${
+            isDraft && invoice.invoice_id
+              ? `
+                <button
+                  type="button"
+                  class="btn${
+                    primaryAction === 'edit'
+                      ? ' primary'
+                      : ''
+                  } invoice-detail-edit"
+                >
+                  編集
+                </button>
+              `
+              : ''
+          }
+
+          ${
+            canSend
+              ? `
+                <button
+                  type="button"
+                  class="btn${
+                    primaryAction === 'send'
+                      ? ' primary'
+                      : ''
+                  } invoice-send"
+                >
+                  送付登録
+                </button>
+              `
+              : ''
+          }
+        </div>
+      </div>
 
       ${
-        invoice.pdf_file_url
+        currentSendMessage
           ? `
-            <a
-              class="btn primary"
-              href="${escapeAttr_(
-                invoice.pdf_file_url
-              )}"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              PDFを開く
-            </a>
+            <div class="c-alert c-alert--success invoice-detail-message">
+              ${esc(currentSendMessage)}
+            </div>
+          `
+          : ''
+      }
+
+      <div class="invoice-detail-summary">
+        <div class="invoice-detail-summary__main">
+          <div class="invoice-detail-summary__payee">
+            ${esc(
+              invoice.payee_name_snapshot ||
+              '―'
+            )}
+          </div>
+
+          <div class="invoice-detail-summary__number">
+            ${esc(invoiceNumberLabel)}
+          </div>
+        </div>
+
+        <div class="invoice-detail-summary__amount">
+          ${yen(invoice.total_incl_tax)}
+        </div>
+
+        <div class="invoice-detail-summary__statuses">
+          <span class="c-badge ${invoiceStatusBadge.className}">
+            ${esc(invoiceStatusBadge.label)}
+          </span>
+
+          <span class="c-badge ${paymentStatusBadge.className}">
+            ${esc(paymentStatusBadge.label)}
+          </span>
+
+          ${renderSendStatusBadge_(invoice.send_status)}
+        </div>
+
+        <div class="invoice-detail-summary__dates">
+          <div class="invoice-detail-summary__date">
+            <span class="invoice-detail-summary__date-label">発行日</span>
+            <span class="invoice-detail-summary__date-value">
+              ${esc(formatDate_(invoice.issue_date))}
+            </span>
+          </div>
+
+          <div class="invoice-detail-summary__date">
+            <span class="invoice-detail-summary__date-label">支払期限</span>
+            <span class="invoice-detail-summary__date-value${
+              dueDateOverdue
+                ? ' invoice-detail-summary__date-value--overdue'
+                : ''
+            }">
+              ${esc(formatDate_(invoice.due_date))}
+              ${
+                dueDateOverdue
+                  ? '<span class="invoice-overdue-flag">期限超過</span>'
+                  : ''
+              }
+            </span>
+          </div>
+        </div>
+      </div>
+
+      ${renderInvoiceInfoSection_(invoice)}
+
+      <div class="invoice-detail-section">
+        <div class="invoice-detail-section__header">
+          <div class="invoice-detail-section__title">請求明細</div>
+        </div>
+
+        <div class="item-list-desktop table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>品目</th>
+                <th>数量</th>
+                <th>単位</th>
+                <th>税込単価</th>
+                <th>金額</th>
+                <th>備考</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${renderItemRows_(items)}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="item-list-mobile">
+          <div class="history-card-list">
+            ${renderItemCards_(items)}
+          </div>
+        </div>
+      </div>
+
+      <div class="invoice-detail-section">
+        <div class="invoice-detail-section__header">
+          <div class="invoice-detail-section__title">入金状況</div>
+        </div>
+
+        <div class="invoice-detail-amount-summary">
+          ${renderAmount_(
+            '請求額',
+            invoice.total_incl_tax
+          )}
+
+          ${renderAmount_(
+            '入金済み額',
+            invoice.payment_total
+          )}
+
+          ${renderAmount_(
+            '未入金額',
+            invoice.balance
+          )}
+        </div>
+
+        <div class="invoice-detail-section__subheader">入金履歴</div>
+
+        <div class="payment-list-desktop table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>入金日</th>
+                <th>入金額</th>
+                <th>入金方法</th>
+                <th>入金者名</th>
+                <th>備考</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${renderPaymentRows_(
+                payments
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="payment-list-mobile">
+          <div class="history-card-list">
+            ${renderPaymentCards_(payments)}
+          </div>
+        </div>
+      </div>
+
+      <div class="invoice-detail-section">
+        <div class="invoice-detail-section__header">
+          <div class="invoice-detail-section__title">送付状況</div>
+        </div>
+
+        ${
+          canSend
+            ? `
+              <div
+                id="invoice-send-panel"
+                class="send-panel"
+                style="display:none;"
+              >
+                <h3>送付登録</h3>
+
+                <form id="invoice-send-form">
+                  <div class="form-grid">
+                    <div>
+                      <label class="muted" for="invoice-send-method">
+                        送付方法
+                      </label>
+                      <select
+                        id="invoice-send-method"
+                        name="send_method"
+                        class="c-select invoice-send-method"
+                        required
+                      >
+                        <option value="postal">郵送</option>
+                        <option value="line">LINE</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="muted" for="invoice-send-date">
+                        送付日
+                      </label>
+                      <input
+                        id="invoice-send-date"
+                        name="sent_at"
+                        type="date"
+                        class="c-input invoice-send-date"
+                        value="${escapeAttr_(getTodayString_())}"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label class="muted" for="invoice-send-destination">
+                        送付先名
+                      </label>
+                      <input
+                        id="invoice-send-destination"
+                        name="destination_name"
+                        type="text"
+                        class="c-input invoice-send-destination"
+                        value="${escapeAttr_(
+                          invoice.payee_name_snapshot || ''
+                        )}"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="form-field">
+                    <label class="muted" for="invoice-send-remarks">
+                      備考
+                    </label>
+                    <textarea
+                      id="invoice-send-remarks"
+                      name="remarks"
+                      class="c-textarea invoice-send-remarks"
+                      rows="3"
+                    ></textarea>
+                  </div>
+
+                  <div class="form-field form-actions">
+                    <button
+                      type="submit"
+                      class="btn primary invoice-send-submit"
+                    >
+                      登録する
+                    </button>
+
+                    <button
+                      type="button"
+                      class="btn invoice-send-cancel"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </form>
+              </div>
+            `
+            : ''
+        }
+
+        <div class="invoice-detail-section__subheader">送付履歴</div>
+
+        <div class="send-history-desktop table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>送付方法</th>
+                <th>送付日</th>
+                <th>送付先名</th>
+                <th>再送回数</th>
+                <th>備考</th>
+                <th>登録者</th>
+                <th>登録日時</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${renderSendLogRows_(sendLogs)}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="send-history-mobile">
+          <div class="history-card-list">
+            ${renderSendHistoryCards_(sendLogs)}
+          </div>
+        </div>
+      </div>
+
+      ${renderAdminSection_(invoice)}
+
+      ${renderDangerSection_(canVoid)}
+    </div>
+  `;
+}
+
+
+/**
+ * 請求先・請求情報セクションを作る。
+ * 請求先名・金額・発行日・支払期限はサマリーで既に表示しているため、
+ * ここでは重複しない項目のみ表示する。
+ *
+ * @param {Object} invoice
+ * @return {string}
+ */
+function renderInvoiceInfoSection_(invoice) {
+  const items = [
+    renderInfo_(
+      '件名',
+      invoice.subject
+    ),
+    renderInfo_(
+      '請求区分',
+      getInvoiceTypeLabel_(
+        invoice.invoice_type
+      )
+    ),
+    renderInfo_(
+      '請求書備考',
+      invoice.public_remarks
+    )
+  ]
+    .filter(Boolean)
+    .join('');
+
+  if (!items) {
+    return '';
+  }
+
+  return `
+    <div class="invoice-detail-section">
+      <div class="invoice-detail-section__header">
+        <div class="invoice-detail-section__title">請求情報</div>
+      </div>
+
+      <div class="invoice-detail-info-grid">
+        ${items}
+      </div>
+    </div>
+  `;
+}
+
+
+/**
+ * 管理情報セクションを作る。
+ * created_at/updated_at/internal_noteが1つも存在しない場合は
+ * セクション自体を作らない。
+ *
+ * @param {Object} invoice
+ * @return {string}
+ */
+function renderAdminSection_(invoice) {
+  const infoItems = [
+    renderInfo_(
+      '作成日時',
+      formatDate_(invoice.created_at)
+    ),
+    renderInfo_(
+      '更新日時',
+      formatDate_(invoice.updated_at)
+    )
+  ]
+    .filter(Boolean)
+    .join('');
+
+  const internalNote =
+    String(
+      invoice.internal_note || ''
+    ).trim();
+
+  if (!infoItems && !internalNote) {
+    return '';
+  }
+
+  return `
+    <div class="invoice-detail-section invoice-detail-section--admin">
+      <div class="invoice-detail-section__header">
+        <div class="invoice-detail-section__title">管理情報</div>
+      </div>
+
+      ${
+        infoItems
+          ? `
+            <div class="invoice-detail-info-grid">
+              ${infoItems}
+            </div>
           `
           : ''
       }
 
       ${
-        canSend
+        internalNote
           ? `
-            <button
-              type="button"
-              class="btn primary invoice-send"
-            >
-              送付登録
-            </button>
+            <div class="invoice-detail-info-item">
+              <div class="invoice-detail-info-item__label">内部メモ</div>
+              <div class="invoice-detail-info-item__value">
+                ${esc(internalNote)}
+              </div>
+            </div>
           `
           : ''
       }
-      ${
-  canVoid
-    ? `
+    </div>
+  `;
+}
+
+
+/**
+ * 危険な操作セクションを作る。
+ * 取消可能な条件(canVoid)は既存のまま変更しない。
+ *
+ * @param {boolean} canVoid
+ * @return {string}
+ */
+function renderDangerSection_(canVoid) {
+  if (!canVoid) {
+    return '';
+  }
+
+  return `
+    <div class="invoice-detail-danger">
+      <div class="invoice-detail-section__header">
+        <div class="invoice-detail-section__title">請求書の取消</div>
+      </div>
+
+      <p class="invoice-detail-danger__text">
+        取り消した請求書は元に戻せません。内容に誤りがある場合のみ実行してください。
+      </p>
+
       <button
         type="button"
         class="btn invoice-void"
       >
         請求書を取り消す
       </button>
-    `
-    : ''
-}
     </div>
-
-    ${
-      currentSendMessage
-        ? `
-          <div class="success" style="margin-bottom:12px;">
-            ${esc(currentSendMessage)}
-          </div>
-        `
-        : ''
-    }
-
-    ${
-      canSend
-        ? `
-          <div
-            id="invoice-send-panel"
-            class="panel send-panel"
-            style="display:none;"
-          >
-            <h2>送付登録</h2>
-
-            <form id="invoice-send-form">
-              <div class="form-grid">
-                <div>
-                  <label class="muted" for="invoice-send-method">
-                    送付方法
-                  </label>
-                  <select
-                    id="invoice-send-method"
-                    name="send_method"
-                    class="invoice-send-method"
-                    required
-                  >
-                    <option value="postal">郵送</option>
-                    <option value="line">LINE</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="muted" for="invoice-send-date">
-                    送付日
-                  </label>
-                  <input
-                    id="invoice-send-date"
-                    name="sent_at"
-                    type="date"
-                    class="invoice-send-date"
-                    value="${escapeAttr_(getTodayString_())}"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label class="muted" for="invoice-send-destination">
-                    送付先名
-                  </label>
-                  <input
-                    id="invoice-send-destination"
-                    name="destination_name"
-                    type="text"
-                    class="invoice-send-destination"
-                    value="${escapeAttr_(
-                      invoice.payee_name_snapshot || ''
-                    )}"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div class="form-field">
-                <label class="muted" for="invoice-send-remarks">
-                  備考
-                </label>
-                <textarea
-                  id="invoice-send-remarks"
-                  name="remarks"
-                  class="invoice-send-remarks"
-                  rows="3"
-                ></textarea>
-              </div>
-
-              <div class="form-field form-actions">
-                <button
-                  type="submit"
-                  class="btn primary invoice-send-submit"
-                >
-                  登録する
-                </button>
-
-                <button
-                  type="button"
-                  class="btn invoice-send-cancel"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </form>
-          </div>
-        `
-        : ''
-    }
-
-    <div class="panel">
-      <h2>
-        ${esc(
-          invoice.invoice_number ||
-          '請求書詳細'
-        )}
-      </h2>
-
-      <div
-        style="
-          display:grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-              minmax(220px, 1fr)
-            );
-          gap:16px;
-          margin-top:20px;
-        "
-      >
-        ${renderInfo_(
-          '請求先',
-          invoice.payee_name_snapshot
-        )}
-
-        ${renderInfo_(
-          '件名',
-          invoice.subject
-        )}
-
-        ${renderInfo_(
-          '発行日',
-          formatDate_(
-            invoice.issue_date
-          )
-        )}
-
-        ${renderInfo_(
-          '支払期限',
-          formatDate_(
-            invoice.due_date
-          )
-        )}
-
-        ${renderInfo_(
-          '状態',
-          getStatusLabel_(
-            invoice.status,
-            invoice.payment_status
-          )
-        )}
-
-        ${renderSendStatusBadge_(
-          invoice.send_status
-        )}
-
-        ${renderInfo_(
-          '請求区分',
-          getInvoiceTypeLabel_(
-            invoice.invoice_type
-          )
-        )}
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>請求金額</h2>
-
-      <div
-        style="
-          display:grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-              minmax(180px, 1fr)
-            );
-          gap:16px;
-          margin-top:20px;
-        "
-      >
-        ${renderAmount_(
-          '請求額',
-          invoice.total_incl_tax
-        )}
-
-        ${renderAmount_(
-          '入金済額',
-          invoice.payment_total
-        )}
-
-        ${renderAmount_(
-          '残額',
-          invoice.balance
-        )}
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>請求明細</h2>
-
-      <div class="item-list-desktop table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>品目</th>
-              <th>数量</th>
-              <th>単位</th>
-              <th>税込単価</th>
-              <th>金額</th>
-              <th>備考</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${renderItemRows_(items)}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="item-list-mobile">
-        <div class="history-card-list">
-          ${renderItemCards_(items)}
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>入金履歴</h2>
-
-      <div class="payment-list-desktop table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>入金日</th>
-              <th>入金額</th>
-              <th>入金方法</th>
-              <th>入金者名</th>
-              <th>備考</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${renderPaymentRows_(
-              payments
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="payment-list-mobile">
-        <div class="history-card-list">
-          ${renderPaymentCards_(payments)}
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>送付履歴</h2>
-
-      <div class="send-history-desktop table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>送付方法</th>
-              <th>送付日</th>
-              <th>送付先名</th>
-              <th>再送回数</th>
-              <th>備考</th>
-              <th>登録者</th>
-              <th>登録日時</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${renderSendLogRows_(sendLogs)}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="send-history-mobile">
-        <div class="history-card-list">
-          ${renderSendHistoryCards_(sendLogs)}
-        </div>
-      </div>
-    </div>
-
-    ${
-      invoice.public_remarks
-        ? `
-          <div class="panel">
-            <h2>請求書備考</h2>
-
-            <p>
-              ${esc(
-                invoice.public_remarks
-              )}
-            </p>
-          </div>
-        `
-        : ''
-    }
-
-    ${
-      invoice.internal_note
-        ? `
-          <div class="panel">
-            <h2>内部メモ</h2>
-
-            <p>
-              ${esc(
-                invoice.internal_note
-              )}
-            </p>
-          </div>
-        `
-        : ''
-    }
   `;
 }
 
 
 /**
- * 画面イベントを設定する。
+ * エラー表示を作る。
+ *
+ * @param {*} error
+ * @return {string}
  */
+function renderError_(error) {
+  const message =
+    (error && error.message) ||
+    '請求書詳細の読み込みに失敗しました。';
+
+  return `
+    <div class="invoice-detail-view">
+      <div class="c-alert c-alert--danger invoice-detail-error">
+        ${esc(message)}
+      </div>
+
+      <div class="invoice-detail-toolbar">
+        <button
+          type="button"
+          class="btn"
+          data-go="invoices"
+        >
+          請求書一覧へ戻る
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+
 /**
  * 画面イベントを設定する。
  */
@@ -480,6 +669,37 @@ export function bind() {
       'click',
       function () {
         go('invoices');
+      }
+    );
+  }
+
+  const editButton =
+    document.querySelector(
+      '.invoice-detail-edit'
+    );
+
+  if (editButton) {
+    editButton.addEventListener(
+      'click',
+      function () {
+        const invoice =
+          currentDetail?.invoice || {};
+
+        const invoiceId =
+          String(
+            invoice.invoice_id || ''
+          ).trim();
+
+        if (!invoiceId) {
+          return;
+        }
+
+        go(
+          'invoiceCreate',
+          {
+            invoiceId: invoiceId
+          }
+        );
       }
     );
   }
@@ -1031,6 +1251,128 @@ function renderSendHistoryCard_(log) {
 
 
 /**
+ * 請求状態バッジ（.c-badge系）を返す。
+ * invoices.jsのgetInvoiceStatusBadge_と同じ判定基準。
+ *
+ * @param {string} status
+ * @return {{className: string, label: string}}
+ */
+function getInvoiceStatusBadge_(status) {
+  if (status === 'draft') {
+    return {
+      className: 'c-badge--draft',
+      label: '下書き'
+    };
+  }
+
+  if (status === 'issued') {
+    return {
+      className: 'c-badge--issued',
+      label: '発行済み'
+    };
+  }
+
+  if (
+    status === 'void' ||
+    status === 'voided'
+  ) {
+    return {
+      className: 'c-badge--cancelled',
+      label: '取消'
+    };
+  }
+
+  return {
+    className: 'c-badge--draft',
+    label: status || '―'
+  };
+}
+
+
+/**
+ * 入金状態バッジ（.c-badge系）を返す。
+ * invoices.jsのgetPaymentStatusBadge_と同じ判定基準。
+ *
+ * @param {string} paymentStatus
+ * @return {{className: string, label: string}}
+ */
+function getPaymentStatusBadge_(paymentStatus) {
+  if (paymentStatus === 'paid') {
+    return {
+      className: 'c-badge--paid',
+      label: '入金済み'
+    };
+  }
+
+  if (
+    paymentStatus === 'partially_paid' ||
+    paymentStatus === 'partial'
+  ) {
+    return {
+      className: 'c-badge--partial',
+      label: '一部入金'
+    };
+  }
+
+  if (paymentStatus === 'overpaid') {
+    return {
+      className: 'c-badge--paid',
+      label: '過入金'
+    };
+  }
+
+  return {
+    className: 'c-badge--unpaid',
+    label: '未入金'
+  };
+}
+
+
+/**
+ * 支払期限を過ぎているか判定する
+ * （invoices.jsのisOverdue_と同じ条件：発行済み・未入金・支払期限が本日より前）。
+ *
+ * @param {string} status
+ * @param {string} paymentStatus
+ * @param {*} dueDate
+ * @return {boolean}
+ */
+function isOverdue_(
+  status,
+  paymentStatus,
+  dueDate
+) {
+  if (status !== 'issued') {
+    return false;
+  }
+
+  if (
+    paymentStatus === 'paid' ||
+    paymentStatus === 'overpaid'
+  ) {
+    return false;
+  }
+
+  if (!dueDate) {
+    return false;
+  }
+
+  const due = new Date(dueDate);
+
+  if (isNaN(due.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+
+  return due.getTime() < today.getTime();
+}
+
+
+/**
  * 送付状態の表示名を返す。
  *
  * @param {*} sendStatus
@@ -1054,11 +1396,12 @@ function getSendStatusLabel_(sendStatus) {
     return '再送済み';
   }
 
-  return sendStatus || '未登録';
+  return sendStatus || '未送付';
 }
 
 /**
- * 送付状態をバッジ表示する。
+ * 送付状態を.c-badgeで表示する。
+ * ラベル文言はgetSendStatusLabel_をそのまま利用する。
  *
  * @param {*} sendStatus
  * @return {string}
@@ -1069,25 +1412,21 @@ function renderSendStatusBadge_(sendStatus) {
       .trim()
       .toLowerCase();
 
-  let badgeClass = 'badge-none';
+  let badgeClass = 'c-badge--unsent';
 
-  if (normalized === 'sent_postal') {
-    badgeClass = 'badge-sent-postal';
-  } else if (normalized === 'sent_line') {
-    badgeClass = 'badge-sent-line';
-  } else if (normalized === 'resent') {
-    badgeClass = 'badge-resent';
+  if (normalized === 'resent') {
+    badgeClass = 'c-badge--resent';
+  } else if (
+    normalized === 'sent_postal' ||
+    normalized === 'sent_line'
+  ) {
+    badgeClass = 'c-badge--sent';
   }
 
   return `
-    <div>
-      <div class="muted">送付状態</div>
-      <div style="margin-top:6px;">
-        <span class="badge ${badgeClass}">
-          ${esc(getSendStatusLabel_(sendStatus))}
-        </span>
-      </div>
-    </div>
+    <span class="c-badge ${badgeClass}">
+      ${esc(getSendStatusLabel_(sendStatus))}
+    </span>
   `;
 }
 
@@ -1133,7 +1472,8 @@ function getTodayString_() {
 }
 
 /**
- * 基本情報を表示する。
+ * 情報グリッドの1項目を作る。値が空の場合は何も返さない
+ * （空欄を無理に「―」で埋めない）。
  *
  * @param {string} label
  * @param {*} value
@@ -1143,21 +1483,23 @@ function renderInfo_(
   label,
   value
 ) {
+  const text =
+    String(
+      value ?? ''
+    ).trim();
+
+  if (!text) {
+    return '';
+  }
+
   return `
-    <div>
-      <div class="muted">
+    <div class="invoice-detail-info-item">
+      <div class="invoice-detail-info-item__label">
         ${esc(label)}
       </div>
 
-      <div
-        style="
-          margin-top:6px;
-          font-weight:600;
-        "
-      >
-        ${esc(
-          value || '―'
-        )}
+      <div class="invoice-detail-info-item__value">
+        ${esc(text)}
       </div>
     </div>
   `;
@@ -1176,18 +1518,12 @@ function renderAmount_(
   value
 ) {
   return `
-    <div>
-      <div class="muted">
+    <div class="invoice-detail-info-item">
+      <div class="invoice-detail-info-item__label">
         ${esc(label)}
       </div>
 
-      <div
-        style="
-          margin-top:6px;
-          font-size:1.4rem;
-          font-weight:700;
-        "
-      >
+      <div class="invoice-detail-info-item__value invoice-detail-info-item__value--amount">
         ${yen(value)}
       </div>
     </div>
@@ -1547,7 +1883,8 @@ function renderPaymentCard_(payment) {
 
 
 /**
- * 請求書の状態表示を作る。
+ * 請求書の状態表示を作る（現在は個別バッジ表示に置き換えたため未使用だが、
+ * 既存の関数名を変更しない方針のため残している）。
  *
  * @param {*} status
  * @param {*} paymentStatus
@@ -1654,7 +1991,7 @@ function getInvoiceTypeLabel_(
   return (
     labels[normalized] ||
     normalized ||
-    '―'
+    ''
   );
 }
 
