@@ -2406,3 +2406,354 @@ div.invoice-list-empty{
     width:100%;
   }
 }
+
+/* ==========================================================================
+   年会費一括作成 (Quiet Precision 本格再設計)
+   保存payload・API名・判定ロジックはJS側で無変更。
+   候補一覧は単一の<table>のみを使用し、900px以下ではCSSで
+   <tr>/<td>自体をカード風に変形する(チェックボックス等の複製はしない)。
+   ========================================================================== */
+
+.annual-fees-view{
+  width:100%;
+  max-width:var(--content-max-width);
+  min-width:0;
+  margin:0 auto;
+  box-sizing:border-box;
+}
+
+.annual-fees-intro{
+  margin-bottom:12px;
+}
+
+.annual-fees-intro__text{
+  margin:0;
+  font-size:14px;
+  color:var(--color-text-secondary);
+}
+
+.annual-fees-notice{
+  margin-bottom:20px;
+  line-height:1.6;
+}
+
+.annual-fees-error{
+  margin-bottom:20px;
+}
+
+.annual-fees-section{
+  margin-top:20px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  box-shadow:none;
+  padding:20px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.annual-fees-section__header{
+  margin-bottom:16px;
+}
+
+.annual-fees-section__title{
+  font-size:17px;
+  font-weight:700;
+  line-height:1.4;
+  color:var(--color-text-primary);
+}
+
+.annual-fees-section__description{
+  margin-top:4px;
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+
+.annual-fees-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px 20px;
+  min-width:0;
+}
+
+.annual-fees-field{
+  min-width:0;
+}
+
+.annual-fees-field__label{
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+  margin-bottom:6px;
+}
+
+.annual-fees-field__value{
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-primary);
+  overflow-wrap:anywhere;
+}
+
+.annual-fees-settings{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+  min-width:0;
+}
+
+.annual-fees-setting-item{
+  min-width:0;
+  padding:14px;
+  background:var(--color-bg);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+}
+
+.annual-fees-setting-item__type{
+  font-size:13px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.annual-fees-setting-item__amount{
+  margin-top:6px;
+  font-size:20px;
+  font-weight:700;
+  color:var(--color-text-primary);
+  font-variant-numeric:tabular-nums;
+}
+
+.annual-fees-setting-item__amount--exempt{
+  font-size:15px;
+  color:var(--color-text-secondary);
+}
+
+.annual-fees-setting-item__note{
+  margin-top:6px;
+  font-size:12px;
+  color:var(--color-text-muted);
+  overflow-wrap:anywhere;
+}
+
+.annual-fees-members{
+  min-width:0;
+}
+
+.annual-fees-members th{
+  background:var(--color-bg);
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.annual-fees-members th,
+.annual-fees-members td{
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+.annual-fees-members tbody tr:hover{
+  background:#F9FAF9;
+}
+
+.annual-fees-amount{
+  text-align:right;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+  color:var(--color-text-primary);
+}
+
+.annual-fees-member__status{
+  display:inline-flex;
+  align-items:center;
+  padding:2px 8px;
+  border-radius:4px;
+  font-size:12px;
+  font-weight:600;
+  white-space:nowrap;
+  border:1px solid;
+}
+
+.annual-fees-member__status--ready{
+  color:var(--color-success);
+  background:var(--color-success-bg);
+  border-color:var(--color-success-border);
+}
+
+.annual-fees-member__status--duplicate{
+  color:var(--color-info);
+  background:var(--color-info-bg);
+  border-color:var(--color-info-border);
+}
+
+.annual-fees-member__status--exempt,
+.annual-fees-member__status--excluded{
+  color:var(--color-text-secondary);
+  background:var(--color-bg);
+  border-color:var(--color-border-strong);
+}
+
+.annual-fees-member__status--needs-count{
+  color:var(--color-warning);
+  background:var(--color-warning-bg);
+  border-color:var(--color-warning-border);
+}
+
+.annual-fees-member__status--error{
+  color:var(--color-danger);
+  background:var(--color-danger-bg);
+  border-color:var(--color-danger-border);
+}
+
+.annual-fees-empty{
+  padding:24px 16px;
+  text-align:center;
+  color:var(--color-text-muted);
+  font-size:13px;
+}
+
+.annual-fees-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:16px;
+}
+
+.annual-fees-summary-card{
+  min-width:0;
+  box-sizing:border-box;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  box-shadow:none;
+  padding:18px;
+}
+
+.annual-fees-summary-card__label{
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.annual-fees-summary-card__value{
+  margin-top:8px;
+  font-size:26px;
+  font-weight:700;
+  color:var(--color-text-primary);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.annual-fees-summary-card__note{
+  margin-top:6px;
+  font-size:12px;
+  color:var(--color-text-muted);
+}
+
+.annual-fees-actions{
+  margin-top:20px;
+  padding:20px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.annual-fees-actions__group{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.annual-fees-actions .btn{
+  min-height:40px;
+  white-space:nowrap;
+}
+
+@media(max-width:1100px){
+  .annual-fees-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:480px){
+  .annual-fees-summary{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(max-width:900px){
+  .annual-fees-section{
+    padding:16px;
+  }
+
+  .annual-fees-grid{
+    grid-template-columns:1fr;
+  }
+
+  .annual-fees-actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .annual-fees-actions__group{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .annual-fees-actions .btn{
+    width:100%;
+  }
+
+  .annual-fees-members table,
+  .annual-fees-members thead,
+  .annual-fees-members tbody{
+    display:block;
+  }
+
+  .annual-fees-members thead{
+    display:none;
+  }
+
+  .annual-fees-members tr.annual-fees-member{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-sm);
+    padding:14px;
+    margin-bottom:12px;
+  }
+
+  .annual-fees-members tr.annual-fees-member:last-child{
+    margin-bottom:0;
+  }
+
+  .annual-fees-members td{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    padding:0;
+    min-width:0;
+    border-bottom:none;
+  }
+
+  .annual-fees-members td::before{
+    content:attr(data-label);
+    font-size:12px;
+    font-weight:600;
+    color:var(--color-text-muted);
+  }
+
+  .annual-fees-amount{
+    text-align:left;
+  }
+}
