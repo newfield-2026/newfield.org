@@ -26,52 +26,75 @@ export async function render(ctx) {
 
   return `
     <div class="invoice-create-view">
-      <div class="invoice-create-toolbar">
-        <div class="invoice-create-toolbar__back">
+      <div class="invoice-create-intro">
+        <div class="invoice-create-intro__main">
+          <div class="invoice-create-mode" id="invoice-create-mode">
+            ${
+              isEditMode
+                ? `
+                  <span class="c-badge c-badge--draft">下書き</span>
+                  <span class="invoice-create-mode__text">
+                    下書きを編集
+                  </span>
+                `
+                : `
+                  <span class="invoice-create-mode__text">
+                    新しい請求書を作成
+                  </span>
+                `
+            }
+          </div>
+
+          <p class="invoice-create-intro__text">
+            請求先・請求情報・明細を確認しながら入力します。
+          </p>
+        </div>
+
+        <div class="invoice-create-intro__actions">
           <button class="btn" data-go="invoices">
             請求書一覧へ戻る
           </button>
-        </div>
-
-        <div class="invoice-create-mode" id="invoice-create-mode">
-          ${
-            isEditMode
-              ? `
-                <span class="c-badge c-badge--draft">下書き</span>
-                <span class="invoice-create-mode__text">
-                  下書きを編集
-                </span>
-              `
-              : `
-                <span class="invoice-create-mode__text">
-                  新しい請求書を作成
-                </span>
-              `
-          }
         </div>
       </div>
 
       <div id="invoice-message"></div>
 
-      <p class="invoice-create-section__description">
-        下書き保存では正式な請求書番号は採番されません。発行操作で初めて請求書番号が採番されます。
-      </p>
+      ${
+        !isEditMode
+          ? `
+            <div class="c-alert c-alert--info invoice-create-note">
+              下書き保存では正式な請求書番号は採番されません。発行時に採番されます。
+            </div>
+          `
+          : ''
+      }
 
       <div class="invoice-create-section">
         <div class="invoice-create-section__header">
-          <div class="invoice-create-section__title">請求先</div>
+          <div>
+            <div class="invoice-create-section__title">請求先</div>
+            <div class="invoice-create-section__description">
+              請求書を送付する会員・団体を選択します
+            </div>
+          </div>
         </div>
 
         <div class="invoice-create-grid">
           <div class="invoice-create-field">
-            <label for="invoice-type">請求区分 <span class="invoice-create-required">必須</span></label>
+            <label class="invoice-create-field__label" for="invoice-type">
+              請求区分
+              <span class="invoice-create-required">必須</span>
+            </label>
             <select id="invoice-type" class="c-select">
               ${renderInvoiceTypeOptions_()}
             </select>
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-payee">請求先 <span class="invoice-create-required">必須</span></label>
+            <label class="invoice-create-field__label" for="invoice-payee">
+              請求先
+              <span class="invoice-create-required">必須</span>
+            </label>
             <select id="invoice-payee" class="c-select">
               <option value="">選択してください</option>
               ${renderPayeeOptions_()}
@@ -79,7 +102,9 @@ export async function render(ctx) {
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-honorific">敬称</label>
+            <label class="invoice-create-field__label" for="invoice-honorific">
+              敬称
+            </label>
             <select id="invoice-honorific" class="c-select">
               <option value="様">様</option>
               <option value="御中">御中</option>
@@ -87,7 +112,9 @@ export async function render(ctx) {
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-assigned-to">担当者</label>
+            <label class="invoice-create-field__label" for="invoice-assigned-to">
+              担当者
+            </label>
             <input
               id="invoice-assigned-to"
               class="c-input"
@@ -96,9 +123,13 @@ export async function render(ctx) {
           </div>
         </div>
 
+        <div class="invoice-create-payee-info__label">
+          選択した請求先情報
+        </div>
+
         <div
           id="invoice-payee-info"
-          class="invoice-create-payee-info"
+          class="invoice-create-payee-info invoice-create-payee-info--empty"
         >
           請求先を選択してください。
         </div>
@@ -106,12 +137,20 @@ export async function render(ctx) {
 
       <div class="invoice-create-section">
         <div class="invoice-create-section__header">
-          <div class="invoice-create-section__title">請求情報</div>
+          <div>
+            <div class="invoice-create-section__title">請求情報</div>
+            <div class="invoice-create-section__description">
+              件名・発行日・支払期限を設定します
+            </div>
+          </div>
         </div>
 
         <div class="invoice-create-grid">
           <div class="invoice-create-field invoice-create-field--wide">
-            <label for="invoice-subject">件名 <span class="invoice-create-required">必須</span></label>
+            <label class="invoice-create-field__label" for="invoice-subject">
+              件名
+              <span class="invoice-create-required">必須</span>
+            </label>
             <input
               id="invoice-subject"
               class="c-input"
@@ -120,7 +159,10 @@ export async function render(ctx) {
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-issue-date">発行日 <span class="invoice-create-required">必須</span></label>
+            <label class="invoice-create-field__label" for="invoice-issue-date">
+              発行日
+              <span class="invoice-create-required">必須</span>
+            </label>
             <input
               id="invoice-issue-date"
               class="c-input"
@@ -130,7 +172,10 @@ export async function render(ctx) {
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-due-date">支払期限 <span class="invoice-create-required">必須</span></label>
+            <label class="invoice-create-field__label" for="invoice-due-date">
+              支払期限
+              <span class="invoice-create-required">必須</span>
+            </label>
             <input
               id="invoice-due-date"
               class="c-input"
@@ -140,7 +185,9 @@ export async function render(ctx) {
           </div>
 
           <div class="invoice-create-field">
-            <label for="invoice-fiscal-year">会計年度</label>
+            <label class="invoice-create-field__label" for="invoice-fiscal-year">
+              会計年度
+            </label>
             <input
               id="invoice-fiscal-year"
               class="c-input"
@@ -154,7 +201,12 @@ export async function render(ctx) {
 
       <div class="invoice-create-section">
         <div class="invoice-create-items__header">
-          <div class="invoice-create-section__title">請求明細</div>
+          <div>
+            <div class="invoice-create-section__title">請求明細</div>
+            <div class="invoice-create-section__description">
+              請求内容と金額を入力します
+            </div>
+          </div>
         </div>
 
         <div class="invoice-create-items table-wrap">
@@ -185,7 +237,9 @@ export async function render(ctx) {
 
         <div class="invoice-create-totals">
           <div class="invoice-create-field invoice-create-totals__discount">
-            <label for="invoice-discount">値引き</label>
+            <label class="invoice-create-field__label" for="invoice-discount">
+              値引き
+            </label>
             <input
               id="invoice-discount"
               class="c-input"
@@ -220,14 +274,22 @@ export async function render(ctx) {
 
       <div class="invoice-create-section">
         <div class="invoice-create-section__header">
-          <div class="invoice-create-section__title">備考</div>
+          <div>
+            <div class="invoice-create-section__title">備考・内部メモ</div>
+            <div class="invoice-create-section__description">
+              請求書への表示内容と内部管理用メモを入力します
+            </div>
+          </div>
         </div>
 
         <div class="invoice-create-notes">
           <div class="invoice-create-field">
-            <label for="invoice-public-remarks">
+            <label class="invoice-create-field__label" for="invoice-public-remarks">
               請求書に表示する備考
             </label>
+            <div class="invoice-create-field__hint">
+              請求書PDFに表示されます。
+            </div>
 
             <textarea
               id="invoice-public-remarks"
@@ -236,8 +298,8 @@ export async function render(ctx) {
             >恐れ入りますが、振込手数料はご負担くださいますようお願いいたします。</textarea>
           </div>
 
-          <div class="invoice-create-field">
-            <label for="invoice-internal-note">
+          <div class="invoice-create-field invoice-create-field--muted">
+            <label class="invoice-create-field__label" for="invoice-internal-note">
               内部管理メモ
             </label>
             <div class="invoice-create-field__hint">
@@ -254,38 +316,42 @@ export async function render(ctx) {
       </div>
 
       <div class="invoice-create-actions">
-        <button
-          type="button"
-          class="btn"
-          data-go="invoices"
-        >
-          請求書一覧へ戻る
-        </button>
+        <div class="invoice-create-actions__group">
+          <button
+            type="button"
+            class="btn"
+            data-go="invoices"
+          >
+            請求書一覧へ戻る
+          </button>
 
-        <button
-          type="button"
-          class="btn"
-          id="invoice-reset"
-        >
-          入力をリセット
-        </button>
+          <button
+            type="button"
+            class="btn"
+            id="invoice-reset"
+          >
+            入力をリセット
+          </button>
+        </div>
 
-        <button
-          type="button"
-          class="btn"
-          id="invoice-issue"
-          style="display:none"
-        >
-          請求書を発行
-        </button>
+        <div class="invoice-create-actions__group">
+          <button
+            type="button"
+            class="btn"
+            id="invoice-issue"
+            style="display:none"
+          >
+            請求書を発行
+          </button>
 
-        <button
-          type="button"
-          class="btn primary"
-          id="invoice-save"
-        >
-          下書き保存
-        </button>
+          <button
+            type="button"
+            class="btn primary"
+            id="invoice-save"
+          >
+            下書き保存
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -465,10 +531,10 @@ function onPayeeChange_() {
   if (!raw) {
     currentPayee = null;
 
-    document.querySelector(
-      '#invoice-payee-info'
-    ).textContent =
-      '請求先を選択してください。';
+    setPayeeInfo_(
+      '請求先を選択してください。',
+      true
+    );
 
     return;
   }
@@ -491,10 +557,10 @@ function onPayeeChange_() {
     });
 
   if (!selected) {
-    document.querySelector(
-      '#invoice-payee-info'
-    ).textContent =
-      '請求先情報を取得できませんでした。';
+    setPayeeInfo_(
+      '請求先情報を取得できませんでした。',
+      true
+    );
 
     return;
   }
@@ -506,9 +572,36 @@ function onPayeeChange_() {
     selected.email
   ].filter(Boolean);
 
-  document.querySelector(
-    '#invoice-payee-info'
-  ).textContent = details.join(' / ');
+  setPayeeInfo_(
+    details.join(' / '),
+    false
+  );
+}
+
+
+/**
+ * 請求先情報ボックスのテキストと、未選択時の見た目
+ * （--emptyクラス）を切り替える。
+ *
+ * @param {string} text
+ * @param {boolean} isEmpty
+ */
+function setPayeeInfo_(text, isEmpty) {
+  const target =
+    document.querySelector(
+      '#invoice-payee-info'
+    );
+
+  if (!target) {
+    return;
+  }
+
+  target.textContent = text;
+
+  target.classList.toggle(
+    'invoice-create-payee-info--empty',
+    Boolean(isEmpty)
+  );
 }
 
 
@@ -1253,6 +1346,11 @@ async function loadDraft_(invoiceId) {
             .filter(Boolean)
             .join(' / ')
         : '請求先情報を取得できませんでした。';
+
+      payeeInfo.classList.toggle(
+        'invoice-create-payee-info--empty',
+        !selectedPayee
+      );
     }
 
     const tbody = document.querySelector(
