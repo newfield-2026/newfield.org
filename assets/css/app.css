@@ -2494,47 +2494,6 @@ div.invoice-list-empty{
   overflow-wrap:anywhere;
 }
 
-.annual-fees-settings{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:12px;
-  min-width:0;
-}
-
-.annual-fees-setting-item{
-  min-width:0;
-  padding:14px;
-  background:var(--color-bg);
-  border:1px solid var(--color-border);
-  border-radius:var(--radius-sm);
-}
-
-.annual-fees-setting-item__type{
-  font-size:13px;
-  font-weight:600;
-  color:var(--color-text-secondary);
-}
-
-.annual-fees-setting-item__amount{
-  margin-top:6px;
-  font-size:20px;
-  font-weight:700;
-  color:var(--color-text-primary);
-  font-variant-numeric:tabular-nums;
-}
-
-.annual-fees-setting-item__amount--exempt{
-  font-size:15px;
-  color:var(--color-text-secondary);
-}
-
-.annual-fees-setting-item__note{
-  margin-top:6px;
-  font-size:12px;
-  color:var(--color-text-muted);
-  overflow-wrap:anywhere;
-}
-
 .annual-fees-members{
   min-width:0;
 }
