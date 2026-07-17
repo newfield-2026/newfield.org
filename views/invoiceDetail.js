@@ -822,6 +822,24 @@ function bindSendRegistration_() {
         if (remarksInput) {
           remarksInput.value = '';
         }
+
+        requestAnimationFrame(
+          function () {
+            const prefersReducedMotion =
+              window.matchMedia &&
+              window.matchMedia(
+                '(prefers-reduced-motion: reduce)'
+              ).matches;
+
+            formWrapper.scrollIntoView({
+              behavior:
+                prefersReducedMotion
+                  ? 'auto'
+                  : 'smooth',
+              block: 'start'
+            });
+          }
+        );
       }
     }
   );
