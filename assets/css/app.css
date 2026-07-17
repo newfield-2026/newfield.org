@@ -1870,6 +1870,7 @@ div.invoice-list-empty{
 .send-panel{
   min-width:0;
   box-sizing:border-box;
+  scroll-margin-top:80px;
 }
 
 /* PC版の請求明細・入金履歴・送付履歴テーブルの見た目調整
