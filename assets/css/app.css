@@ -1967,3 +1967,337 @@ div.invoice-list-empty{
     width:100%;
   }
 }
+
+/* ==========================================================================
+   請求書新規作成・下書き編集 (Quiet Precision 本格再設計)
+   保存payload・API名・バリデーション・明細データ構造はJS側で無変更。
+   既存の.invoice-item-*(明細セル選択用クラス)/.table/.table-wrapは維持し、
+   900px以下では既存<table>をCSS Gridでカード風に変形する(要素の複製はしない)。
+   ========================================================================== */
+
+.invoice-create-view{
+  width:100%;
+  max-width:var(--content-max-width);
+  min-width:0;
+  margin:0 auto;
+  box-sizing:border-box;
+}
+
+.invoice-create-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  margin-bottom:16px;
+  min-width:0;
+}
+
+.invoice-create-toolbar__back{
+  min-width:0;
+}
+
+.invoice-create-toolbar__back .btn{
+  white-space:nowrap;
+}
+
+.invoice-create-mode{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.invoice-create-mode__text{
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-primary);
+  white-space:nowrap;
+}
+
+.invoice-create-message{
+  margin-bottom:16px;
+}
+
+.invoice-create-section__description{
+  margin:0 0 16px;
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+
+.invoice-create-section{
+  margin-top:20px;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-md);
+  box-shadow:none;
+  padding:20px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.invoice-create-section__header,
+.invoice-create-items__header{
+  margin-bottom:16px;
+}
+
+.invoice-create-section__title{
+  font-size:17px;
+  font-weight:600;
+  color:var(--color-text-primary);
+}
+
+.invoice-create-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px 20px;
+  min-width:0;
+}
+
+.invoice-create-field{
+  min-width:0;
+}
+
+.invoice-create-field label{
+  display:block;
+  margin-bottom:6px;
+  font-size:13px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.invoice-create-field--wide{
+  grid-column:1/-1;
+}
+
+.invoice-create-field__hint{
+  margin:-2px 0 6px;
+  font-size:12px;
+  color:var(--color-text-muted);
+}
+
+.invoice-create-required{
+  margin-left:4px;
+  font-size:11px;
+  font-weight:600;
+  color:var(--color-danger);
+}
+
+.invoice-create-payee-info{
+  min-width:0;
+  margin-top:12px;
+  padding:10px 12px;
+  background:var(--color-bg);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  font-size:13px;
+  color:var(--color-text-secondary);
+  overflow-wrap:anywhere;
+}
+
+.invoice-create-items{
+  min-width:0;
+}
+
+.invoice-create-items th{
+  background:var(--color-bg);
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+}
+
+.invoice-create-items th,
+.invoice-create-items td{
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+.invoice-create-items tbody tr:hover{
+  background:#F9FAF9;
+}
+
+.invoice-create-items__add{
+  margin-top:12px;
+  min-height:44px;
+  color:var(--color-primary);
+  background:var(--color-surface);
+  border-color:var(--color-border-strong);
+}
+
+.invoice-create-items__add:hover{
+  background:var(--color-bg);
+}
+
+.invoice-item-delete{
+  min-height:40px;
+  white-space:nowrap;
+  color:var(--color-text-secondary);
+  background:transparent;
+  border-color:var(--color-border);
+}
+
+.invoice-item-delete:hover{
+  color:var(--color-danger);
+  background:var(--color-danger-bg);
+  border-color:var(--color-danger-border);
+}
+
+@media(min-width:901px){
+  .invoice-item-quantity,
+  .invoice-item-unit{
+    width:80px;
+  }
+
+  .invoice-item-price{
+    width:120px;
+  }
+}
+
+.invoice-create-totals{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:8px;
+  width:100%;
+  max-width:420px;
+  min-width:0;
+  margin:16px 0 0 auto;
+  padding-top:16px;
+  border-top:1px solid var(--color-border);
+}
+
+.invoice-create-totals__discount{
+  width:100%;
+  margin-bottom:8px;
+  padding-bottom:12px;
+  border-bottom:1px dashed var(--color-border);
+}
+
+.invoice-create-total-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:16px;
+  width:100%;
+  font-size:14px;
+  color:var(--color-text-secondary);
+}
+
+.invoice-create-total-row strong{
+  font-variant-numeric:tabular-nums;
+  color:var(--color-text-primary);
+  white-space:nowrap;
+}
+
+.invoice-create-total-row--grand{
+  margin-top:4px;
+  padding-top:12px;
+  border-top:1px solid var(--color-border);
+}
+
+.invoice-create-total-row--grand strong{
+  font-size:24px;
+  font-weight:700;
+  color:var(--color-text-primary);
+}
+
+.invoice-create-notes{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  min-width:0;
+}
+
+.invoice-create-actions{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:12px;
+  margin-top:24px;
+}
+
+.invoice-create-actions .btn{
+  white-space:nowrap;
+}
+
+@media(max-width:900px){
+  .invoice-create-toolbar{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:8px;
+  }
+
+  .invoice-create-section{
+    padding:16px;
+  }
+
+  .invoice-create-grid{
+    grid-template-columns:1fr;
+  }
+
+  .invoice-create-field--wide{
+    grid-column:1;
+  }
+
+  .invoice-create-totals{
+    max-width:100%;
+  }
+
+  .invoice-create-actions{
+    flex-direction:column;
+  }
+
+  .invoice-create-actions .btn{
+    width:100%;
+  }
+
+  .invoice-create-items table,
+  .invoice-create-items thead,
+  .invoice-create-items tbody,
+  .invoice-create-items th,
+  .invoice-create-items td,
+  .invoice-create-items tr{
+    display:block;
+  }
+
+  .invoice-create-items thead{
+    display:none;
+  }
+
+  .invoice-create-item{
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-md);
+    padding:12px;
+    margin-bottom:12px;
+  }
+
+  .invoice-create-item:last-child{
+    margin-bottom:0;
+  }
+
+  .invoice-create-items td{
+    display:grid;
+    grid-template-columns:88px minmax(0,1fr);
+    align-items:center;
+    gap:4px 12px;
+    padding:6px 0;
+    min-width:0;
+    border-bottom:none;
+  }
+
+  .invoice-create-items td::before{
+    content:attr(data-label);
+    font-size:12px;
+    color:var(--color-text-muted);
+  }
+
+  .invoice-item-quantity,
+  .invoice-item-unit,
+  .invoice-item-price{
+    width:100%;
+  }
+
+  .invoice-item-delete{
+    width:100%;
+  }
+}

@@ -14,247 +14,279 @@ let currentPayee = null;
  */
 export async function render(ctx) {
   master = await api('getInvoiceCreateMaster');
-　currentInvoiceId = ctx?.invoiceId || '';
-  
+  currentInvoiceId = ctx?.invoiceId || '';
+
   const fiscalYear =
     Number(master.fiscalYear) ||
     Number(ctx?.fiscalYear) ||
     new Date().getFullYear();
 
+  const isEditMode =
+    Boolean(currentInvoiceId);
+
   return `
-    <div class="toolbar">
-      <button class="btn" data-go="invoices">
-        請求書一覧へ戻る
-      </button>
-    </div>
+    <div class="invoice-create-view">
+      <div class="invoice-create-toolbar">
+        <div class="invoice-create-toolbar__back">
+          <button class="btn" data-go="invoices">
+            請求書一覧へ戻る
+          </button>
+        </div>
 
-    <div id="invoice-message"></div>
+        <div class="invoice-create-mode" id="invoice-create-mode">
+          ${
+            isEditMode
+              ? `
+                <span class="c-badge c-badge--draft">下書き</span>
+                <span class="invoice-create-mode__text">
+                  下書きを編集
+                </span>
+              `
+              : `
+                <span class="invoice-create-mode__text">
+                  新しい請求書を作成
+                </span>
+              `
+          }
+        </div>
+      </div>
 
-    <div class="panel" style="margin-bottom:16px">
-      <h2>請求書新規作成</h2>
-      <p class="muted">
-        下書き保存では正式な請求書番号は採番されません。
+      <div id="invoice-message"></div>
+
+      <p class="invoice-create-section__description">
+        下書き保存では正式な請求書番号は採番されません。発行操作で初めて請求書番号が採番されます。
       </p>
-    </div>
 
-    <div class="panel" style="margin-bottom:16px">
-      <h3>1. 請求区分・請求先</h3>
-
-      <div class="form-grid">
-        <div class="field">
-          <label for="invoice-type">請求区分 必須</label>
-          <select id="invoice-type">
-            ${renderInvoiceTypeOptions_()}
-          </select>
+      <div class="invoice-create-section">
+        <div class="invoice-create-section__header">
+          <div class="invoice-create-section__title">請求先</div>
         </div>
 
-        <div class="field">
-          <label for="invoice-payee">請求先 必須</label>
-          <select id="invoice-payee">
-            <option value="">選択してください</option>
-            ${renderPayeeOptions_()}
-          </select>
+        <div class="invoice-create-grid">
+          <div class="invoice-create-field">
+            <label for="invoice-type">請求区分 <span class="invoice-create-required">必須</span></label>
+            <select id="invoice-type" class="c-select">
+              ${renderInvoiceTypeOptions_()}
+            </select>
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-payee">請求先 <span class="invoice-create-required">必須</span></label>
+            <select id="invoice-payee" class="c-select">
+              <option value="">選択してください</option>
+              ${renderPayeeOptions_()}
+            </select>
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-honorific">敬称</label>
+            <select id="invoice-honorific" class="c-select">
+              <option value="様">様</option>
+              <option value="御中">御中</option>
+            </select>
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-assigned-to">担当者</label>
+            <input
+              id="invoice-assigned-to"
+              class="c-input"
+              value="${escapeAttr_(master.user?.email || '')}"
+            >
+          </div>
         </div>
 
-        <div class="field">
-          <label for="invoice-honorific">敬称</label>
-          <select id="invoice-honorific">
-            <option value="様">様</option>
-            <option value="御中">御中</option>
-          </select>
+        <div
+          id="invoice-payee-info"
+          class="invoice-create-payee-info"
+        >
+          請求先を選択してください。
+        </div>
+      </div>
+
+      <div class="invoice-create-section">
+        <div class="invoice-create-section__header">
+          <div class="invoice-create-section__title">請求情報</div>
         </div>
 
-        <div class="field">
-          <label for="invoice-assigned-to">担当者</label>
-          <input
-            id="invoice-assigned-to"
-            value="${escapeAttr_(master.user?.email || '')}"
-          >
+        <div class="invoice-create-grid">
+          <div class="invoice-create-field invoice-create-field--wide">
+            <label for="invoice-subject">件名 <span class="invoice-create-required">必須</span></label>
+            <input
+              id="invoice-subject"
+              class="c-input"
+              value="${escapeAttr_(fiscalYear + '年度 年会費')}"
+            >
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-issue-date">発行日 <span class="invoice-create-required">必須</span></label>
+            <input
+              id="invoice-issue-date"
+              class="c-input"
+              type="date"
+              value="${escapeAttr_(master.today || '')}"
+            >
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-due-date">支払期限 <span class="invoice-create-required">必須</span></label>
+            <input
+              id="invoice-due-date"
+              class="c-input"
+              type="date"
+              value="${escapeAttr_(master.defaultDueDate || '')}"
+            >
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-fiscal-year">会計年度</label>
+            <input
+              id="invoice-fiscal-year"
+              class="c-input"
+              type="number"
+              value="${fiscalYear}"
+              readonly
+            >
+          </div>
         </div>
       </div>
 
-      <div
-        id="invoice-payee-info"
-        class="muted"
-        style="margin-top:12px"
-      >
-        請求先を選択してください。
-      </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:16px">
-      <h3>2. 請求書情報</h3>
-
-      <div class="form-grid">
-        <div class="field field-full">
-          <label for="invoice-subject">件名 必須</label>
-          <input
-            id="invoice-subject"
-            value="${escapeAttr_(fiscalYear + '年度 年会費')}"
-          >
+      <div class="invoice-create-section">
+        <div class="invoice-create-items__header">
+          <div class="invoice-create-section__title">請求明細</div>
         </div>
 
-        <div class="field">
-          <label for="invoice-issue-date">発行日 必須</label>
-          <input
-            id="invoice-issue-date"
-            type="date"
-            value="${escapeAttr_(master.today || '')}"
-          >
-        </div>
+        <div class="invoice-create-items table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>品目</th>
+                <th>数量</th>
+                <th>単位</th>
+                <th>税込単価</th>
+                <th>税区分</th>
+                <th>金額</th>
+                <th></th>
+              </tr>
+            </thead>
 
-        <div class="field">
-          <label for="invoice-due-date">支払期限 必須</label>
-          <input
-            id="invoice-due-date"
-            type="date"
-            value="${escapeAttr_(master.defaultDueDate || '')}"
-          >
+            <tbody id="invoice-items"></tbody>
+          </table>
         </div>
-
-        <div class="field">
-          <label for="invoice-fiscal-year">会計年度</label>
-          <input
-            id="invoice-fiscal-year"
-            type="number"
-            value="${fiscalYear}"
-            readonly
-          >
-        </div>
-
-        <div class="field">
-          <label for="invoice-discount">値引き</label>
-          <input
-            id="invoice-discount"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-          >
-        </div>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:16px">
-      <div
-        style="
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          gap:12px;
-          margin-bottom:12px;
-        "
-      >
-        <h3 style="margin:0">3. 請求明細</h3>
 
         <button
           type="button"
-          class="btn"
+          class="btn invoice-create-items__add"
           id="invoice-add-item"
         >
           ＋ 明細を追加
         </button>
+
+        <div class="invoice-create-totals">
+          <div class="invoice-create-field invoice-create-totals__discount">
+            <label for="invoice-discount">値引き</label>
+            <input
+              id="invoice-discount"
+              class="c-input"
+              type="number"
+              min="0"
+              step="1"
+              value="0"
+            >
+          </div>
+
+          <div class="invoice-create-total-row">
+            <span>税込小計</span>
+            <strong id="invoice-subtotal">0円</strong>
+          </div>
+
+          <div class="invoice-create-total-row">
+            <span>値引き</span>
+            <strong id="invoice-discount-total">0円</strong>
+          </div>
+
+          <div class="invoice-create-total-row">
+            <span>うち消費税</span>
+            <strong id="invoice-tax-total">0円</strong>
+          </div>
+
+          <div class="invoice-create-total-row invoice-create-total-row--grand">
+            <span>合計</span>
+            <strong id="invoice-grand-total">0円</strong>
+          </div>
+        </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>品目</th>
-              <th>数量</th>
-              <th>単位</th>
-              <th>税込単価</th>
-              <th>税区分</th>
-              <th>金額</th>
-              <th></th>
-            </tr>
-          </thead>
+      <div class="invoice-create-section">
+        <div class="invoice-create-section__header">
+          <div class="invoice-create-section__title">備考</div>
+        </div>
 
-          <tbody id="invoice-items"></tbody>
-        </table>
+        <div class="invoice-create-notes">
+          <div class="invoice-create-field">
+            <label for="invoice-public-remarks">
+              請求書に表示する備考
+            </label>
+
+            <textarea
+              id="invoice-public-remarks"
+              class="c-textarea"
+              rows="3"
+            >恐れ入りますが、振込手数料はご負担くださいますようお願いいたします。</textarea>
+          </div>
+
+          <div class="invoice-create-field">
+            <label for="invoice-internal-note">
+              内部管理メモ
+            </label>
+            <div class="invoice-create-field__hint">
+              請求書には表示されません。
+            </div>
+
+            <textarea
+              id="invoice-internal-note"
+              class="c-textarea"
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
       </div>
 
-      <div
-        style="
-          margin-top:16px;
-          display:grid;
-          grid-template-columns:1fr auto;
-          gap:8px 24px;
-          justify-content:end;
-        "
-      >
-        <span class="muted">税込小計</span>
-        <strong id="invoice-subtotal">0円</strong>
+      <div class="invoice-create-actions">
+        <button
+          type="button"
+          class="btn"
+          data-go="invoices"
+        >
+          請求書一覧へ戻る
+        </button>
 
-        <span class="muted">値引き</span>
-        <strong id="invoice-discount-total">0円</strong>
+        <button
+          type="button"
+          class="btn"
+          id="invoice-reset"
+        >
+          入力をリセット
+        </button>
 
-        <span class="muted">うち消費税</span>
-        <strong id="invoice-tax-total">0円</strong>
+        <button
+          type="button"
+          class="btn"
+          id="invoice-issue"
+          style="display:none"
+        >
+          請求書を発行
+        </button>
 
-        <span>合計</span>
-        <strong id="invoice-grand-total">0円</strong>
+        <button
+          type="button"
+          class="btn primary"
+          id="invoice-save"
+        >
+          下書き保存
+        </button>
       </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:16px">
-      <h3>4. 備考</h3>
-
-      <div class="field">
-        <label for="invoice-public-remarks">
-          請求書に表示する備考
-        </label>
-
-        <textarea
-          id="invoice-public-remarks"
-          rows="3"
-        >恐れ入りますが、振込手数料はご負担くださいますようお願いいたします。</textarea>
-      </div>
-
-      <div class="field" style="margin-top:12px">
-        <label for="invoice-internal-note">
-          内部管理メモ
-        </label>
-
-        <textarea
-          id="invoice-internal-note"
-          rows="3"
-        ></textarea>
-      </div>
-    </div>
-
-    <div
-      style="
-        display:flex;
-        justify-content:flex-end;
-        gap:10px;
-        margin-bottom:24px;
-      "
-    >
-      <button
-        type="button"
-        class="btn"
-        id="invoice-reset"
-      >
-        入力をリセット
-      </button>
-
-      <button
-        type="button"
-        class="btn"
-        id="invoice-issue"
-        style="display:none"
-      >
-        請求書を発行
-      </button>
-
-      <button
-        type="button"
-        class="btn primary"
-        id="invoice-save"
-      >
-        下書き保存
-      </button>
     </div>
   `;
 }
@@ -572,10 +604,12 @@ function addItemRow_(item = {}) {
   const row =
     document.createElement('tr');
 
+  row.className = 'invoice-create-item';
+
   row.innerHTML = `
-    <td>
+    <td data-label="品目">
       <input
-        class="invoice-item-name"
+        class="invoice-item-name c-input"
         value="${escapeAttr_(
           item.item_name || ''
         )}"
@@ -583,9 +617,9 @@ function addItemRow_(item = {}) {
       >
     </td>
 
-    <td>
+    <td data-label="数量">
       <input
-        class="invoice-item-quantity"
+        class="invoice-item-quantity c-input"
         type="number"
         min="0"
         step="1"
@@ -594,23 +628,21 @@ function addItemRow_(item = {}) {
             ? item.quantity
             : 1
         }"
-        style="width:80px"
       >
     </td>
 
-    <td>
+    <td data-label="単位">
       <input
-        class="invoice-item-unit"
+        class="invoice-item-unit c-input"
         value="${escapeAttr_(
           item.unit || '式'
         )}"
-        style="width:80px"
       >
     </td>
 
-    <td>
+    <td data-label="税込単価">
       <input
-        class="invoice-item-price"
+        class="invoice-item-price c-input"
         type="number"
         min="0"
         step="1"
@@ -620,12 +652,11 @@ function addItemRow_(item = {}) {
             ? item.unit_price_incl_tax
             : 0
         }"
-        style="width:120px"
       >
     </td>
 
-    <td>
-      <select class="invoice-item-tax">
+    <td data-label="税区分">
+      <select class="invoice-item-tax c-select">
         ${renderTaxTypeOptions_(
           item.tax_type ||
           'taxable_10_inclusive'
@@ -635,12 +666,16 @@ function addItemRow_(item = {}) {
 
     <td
       class="invoice-item-line"
+      data-label="金額"
       style="text-align:right;white-space:nowrap"
     >
       0円
     </td>
 
-    <td>
+    <td
+      data-label="操作"
+      class="invoice-create-item__actions"
+    >
       <button
         type="button"
         class="btn invoice-item-delete"
@@ -1052,7 +1087,7 @@ function showError_(message) {
   }
 
   target.innerHTML = `
-    <div class="error">
+    <div class="c-alert c-alert--danger invoice-create-message">
       ${esc(message)}
     </div>
   `;
@@ -1075,14 +1110,7 @@ function showSuccess_(message) {
   }
 
   target.innerHTML = `
-    <div
-      class="panel"
-      style="
-        margin-bottom:16px;
-        border-color:#9bd3ad;
-        background:#eef9f1;
-      "
-    >
+    <div class="c-alert c-alert--success invoice-create-message">
       ${esc(message)}
     </div>
   `;
@@ -1245,6 +1273,8 @@ async function loadDraft_(invoiceId) {
 
     recalc_();
 
+    updateModeIndicator_(invoice);
+
 const issueButton =
   document.querySelector('#invoice-issue');
 
@@ -1262,6 +1292,34 @@ showSuccess_(
       '下書きの読み込みに失敗しました。'
     );
   }
+}
+
+
+/**
+ * 編集モードのモード表示へ、下書き読み込み後の情報
+ * （請求書番号が存在する場合のみ）を反映する。
+ *
+ * @param {Object} invoice
+ */
+function updateModeIndicator_(invoice) {
+  const textEl =
+    document.querySelector(
+      '.invoice-create-mode__text'
+    );
+
+  if (!textEl) {
+    return;
+  }
+
+  const invoiceNumber =
+    String(
+      invoice.invoice_number || ''
+    ).trim();
+
+  textEl.textContent =
+    invoiceNumber
+      ? '下書きを編集（' + invoiceNumber + '）'
+      : '下書きを編集';
 }
 
 /**
