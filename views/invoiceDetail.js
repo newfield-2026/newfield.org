@@ -825,19 +825,13 @@ function bindSendRegistration_() {
 
         requestAnimationFrame(
           function () {
-            const prefersReducedMotion =
-              window.matchMedia &&
-              window.matchMedia(
-                '(prefers-reduced-motion: reduce)'
-              ).matches;
-
-            formWrapper.scrollIntoView({
-              behavior:
-                prefersReducedMotion
-                  ? 'auto'
-                  : 'smooth',
-              block: 'start'
-            });
+            requestAnimationFrame(
+              function () {
+                scrollToSendPanel_(
+                  formWrapper
+                );
+              }
+            );
           }
         );
       }
@@ -936,6 +930,63 @@ function bindSendRegistration_() {
       }
     }
   );
+}
+
+
+/**
+ * 送付登録フォームの実際のスクロールコンテナを判定し、
+ * ヘッダー分(80px)を差し引いた位置までスクロールする。
+ * .contentが独自にスクロールしていればそちらを、
+ * そうでなければwindowをスクロールする。
+ *
+ * @param {HTMLElement} formWrapper
+ */
+function scrollToSendPanel_(formWrapper) {
+  const prefersReducedMotion =
+    window.matchMedia &&
+    window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
+
+  const behavior =
+    prefersReducedMotion ? 'auto' : 'smooth';
+
+  const scrollContainer =
+    document.querySelector('.content');
+
+  if (
+    scrollContainer &&
+    scrollContainer.scrollHeight >
+      scrollContainer.clientHeight
+  ) {
+    const containerRect =
+      scrollContainer.getBoundingClientRect();
+
+    const panelRect =
+      formWrapper.getBoundingClientRect();
+
+    const targetTop =
+      scrollContainer.scrollTop +
+      panelRect.top -
+      containerRect.top -
+      80;
+
+    scrollContainer.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: behavior
+    });
+
+  } else {
+    const targetTop =
+      window.scrollY +
+      formWrapper.getBoundingClientRect().top -
+      80;
+
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: behavior
+    });
+  }
 }
 /**
  * 請求書を取り消す。
