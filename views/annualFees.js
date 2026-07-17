@@ -29,9 +29,6 @@ export async function render(ctx) {
   const summary =
     summarizeCandidates_(candidates);
 
-  const settingGroups =
-    summarizeByMemberType_(candidates);
-
   return `
     <div class="annual-fees-view">
       <div class="annual-fees-intro">
@@ -80,8 +77,6 @@ export async function render(ctx) {
           )}
         </div>
       </div>
-
-      ${renderSettingsSection_(settingGroups)}
 
       <div class="annual-fees-section">
         <div class="annual-fees-section__header">
@@ -432,166 +427,6 @@ function summarizeCandidates_(candidates) {
     errorCount: errorCount,
     otherCount: otherCount
   };
-}
-
-
-/**
- * 候補一覧を会員区分ごとに集計する
- * （年会費の設定値そのものではなく、対象会員から確認できる内容の集計）。
- *
- * @param {Array} candidates
- * @return {Array<Object>}
- */
-function summarizeByMemberType_(candidates) {
-  const order = [];
-  const groups = new Map();
-
-  candidates.forEach(function (candidate) {
-    const key =
-      candidate.memberType ||
-      '区分不明';
-
-    if (!groups.has(key)) {
-      groups.set(key, {
-        memberType: key,
-        count: 0,
-        exemptCount: 0,
-        amounts: new Set(),
-        calculation: ''
-      });
-
-      order.push(key);
-    }
-
-    const group = groups.get(key);
-
-    group.count += 1;
-
-    if (candidate.status === 'exempt') {
-      group.exemptCount += 1;
-    }
-
-    const amount =
-      candidate.finalAmount ??
-      candidate.standardAmount;
-
-    if (typeof amount === 'number') {
-      group.amounts.add(amount);
-    }
-
-    if (
-      !group.calculation &&
-      (candidate.calculation || candidate.message)
-    ) {
-      group.calculation =
-        candidate.calculation ||
-        candidate.message ||
-        '';
-    }
-  });
-
-  return order.map(function (key) {
-    return groups.get(key);
-  });
-}
-
-
-/**
- * 年会費設定の確認セクションを作る。
- * 集計対象がない場合はセクション自体を作らない。
- *
- * @param {Array<Object>} settingGroups
- * @return {string}
- */
-function renderSettingsSection_(settingGroups) {
-  if (!settingGroups.length) {
-    return '';
-  }
-
-  return `
-    <div class="annual-fees-section">
-      <div class="annual-fees-section__header">
-        <div class="annual-fees-section__title">年会費設定の確認</div>
-        <div class="annual-fees-section__description">
-          対象会員から確認できる、会員区分ごとの内容です
-        </div>
-      </div>
-
-      <div class="annual-fees-settings">
-        ${
-          settingGroups
-            .map(function (group) {
-              return renderSettingItem_(group);
-            })
-            .join('')
-        }
-      </div>
-    </div>
-  `;
-}
-
-
-/**
- * 年会費設定1区分分のカードを作る。
- *
- * @param {Object} group
- * @return {string}
- */
-function renderSettingItem_(group) {
-  const isFullyExempt =
-    group.exemptCount === group.count;
-
-  let amountText;
-
-  if (isFullyExempt) {
-    amountText = '免除';
-
-  } else if (group.amounts.size === 1) {
-    amountText = yen(
-      Array.from(group.amounts)[0]
-    );
-
-  } else if (group.amounts.size > 1) {
-    const values =
-      Array.from(group.amounts).sort(
-        function (a, b) {
-          return a - b;
-        }
-      );
-
-    amountText =
-      yen(values[0]) +
-      '〜' +
-      yen(values[values.length - 1]);
-
-  } else {
-    amountText = '―';
-  }
-
-  return `
-    <div class="annual-fees-setting-item">
-      <div class="annual-fees-setting-item__type">
-        ${esc(group.memberType)}
-      </div>
-
-      <div class="annual-fees-setting-item__amount${
-        isFullyExempt
-          ? ' annual-fees-setting-item__amount--exempt'
-          : ''
-      }">
-        ${amountText}
-      </div>
-
-      <div class="annual-fees-setting-item__note">
-        対象${group.count}件
-        ${
-          group.calculation
-            ? '・' + esc(group.calculation)
-            : ''
-        }
-      </div>
-    </div>
-  `;
 }
 
 
