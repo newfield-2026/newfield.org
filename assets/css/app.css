@@ -3321,6 +3321,12 @@ div.members-empty{
   border-radius:8px;
 }
 
+.member-form-field__hint{
+  margin:6px 0 0;
+  font-size:12px;
+  color:var(--color-text-muted);
+}
+
 .member-form-billing{
   display:flex;
   gap:10px;

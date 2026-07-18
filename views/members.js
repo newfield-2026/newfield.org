@@ -1506,6 +1506,7 @@ function renderMemberFormFields_(type, record, otherPayeeRecord) {
  */
 function renderMemberFields_(record, otherPayeeRecord) {
   const r = record || {};
+  const isEdit = Boolean(record);
   const feeTypeOptions = getMemberTypeOptions_();
 
   return `
@@ -1514,10 +1515,17 @@ function renderMemberFields_(record, otherPayeeRecord) {
 
       <div class="member-form-grid">
         <div class="member-form-field">
-          <label class="member-form-field__label" for="mf-number">
+          <label class="member-form-field__label">
             会員番号
           </label>
-          <input id="mf-number" class="c-input" value="${escapeAttr_(r.member_number || '')}">
+          ${
+            isEdit
+              ? `
+                <div class="member-form-static">${esc(r.member_number || '')}</div>
+                <p class="member-form-field__hint">会員番号は変更できません</p>
+              `
+              : `<div class="member-form-static">保存時に自動発行されます</div>`
+          }
         </div>
 
         <div class="member-form-field">
@@ -1681,6 +1689,7 @@ function renderMemberFields_(record, otherPayeeRecord) {
  */
 function renderOrganizationFields_(record, otherPayeeRecord) {
   const r = record || {};
+  const isEdit = Boolean(record);
 
   return `
     <div class="member-form-section">
@@ -1688,10 +1697,17 @@ function renderOrganizationFields_(record, otherPayeeRecord) {
 
       <div class="member-form-grid">
         <div class="member-form-field">
-          <label class="member-form-field__label" for="mf-number">
+          <label class="member-form-field__label">
             団体番号
           </label>
-          <input id="mf-number" class="c-input" value="${escapeAttr_(r.organization_number || '')}">
+          ${
+            isEdit
+              ? `
+                <div class="member-form-static">${esc(r.organization_number || '')}</div>
+                <p class="member-form-field__hint">会員番号は変更できません</p>
+              `
+              : `<div class="member-form-static">保存時に自動発行されます</div>`
+          }
         </div>
 
         <div class="member-form-field">
@@ -2016,6 +2032,7 @@ async function submitMemberForm_(
         ? '会社名・団体名は必須です。'
         : '氏名は必須です。'
     );
+    scrollMemberModalToError_();
     return;
   }
 
@@ -2024,6 +2041,7 @@ async function submitMemberForm_(
 
     if (!memberType) {
       setFormMessage_(messageEl, '会員区分は必須です。');
+      scrollMemberModalToError_();
       return;
     }
   }
@@ -2044,6 +2062,7 @@ async function submitMemberForm_(
         messageEl,
         '別の請求先を指定する場合、請求先名は必須です。'
       );
+      scrollMemberModalToError_();
       return;
     }
   }
@@ -2080,6 +2099,7 @@ async function submitMemberForm_(
             ((error && error.message) || 'エラーが発生しました') +
             '）'
         );
+        scrollMemberModalToError_();
         return;
       }
 
@@ -2115,6 +2135,7 @@ async function submitMemberForm_(
             ((error && error.message) || 'エラーが発生しました') +
             '）'
         );
+        scrollMemberModalToError_();
         return;
       }
 
@@ -2149,6 +2170,7 @@ async function submitMemberForm_(
       messageEl,
       (error && error.message) || '保存に失敗しました。'
     );
+    scrollMemberModalToError_();
 
   } finally {
     if (submitButton) {
@@ -2183,7 +2205,6 @@ function buildMemberPayload_(
 
   return {
     member_id: r.member_id || '',
-    member_number: getInputValue_('#mf-number'),
     name: getInputValue_('#mf-name'),
     member_type: getSelectValue_('#mf-member-type'),
     postal_code: getInputValue_('#mf-postal-code'),
@@ -2236,7 +2257,6 @@ function buildOrganizationPayload_(
 
   return {
     organization_id: r.organization_id || '',
-    organization_number: getInputValue_('#mf-number'),
     organization_name: getInputValue_('#mf-name'),
     corporate_number: getInputValue_('#mf-corporate-number'),
     representative_name: getInputValue_('#mf-representative-name'),
@@ -3207,10 +3227,63 @@ function setFormMessage_(el, text) {
   }
 
   el.innerHTML = `
-    <div class="c-alert c-alert--danger member-form-error">
+    <div class="c-alert c-alert--danger member-form-error" tabindex="-1">
       ${esc(text)}
     </div>
   `;
+}
+
+
+/**
+ * 会員追加・編集モーダルでエラーが表示された際、モーダル上部へスクロールし
+ * エラーアラートへフォーカスする。
+ *
+ * setFormMessage_でエラーをDOMへ反映した直後に呼ぶ想定。反映直後はまだ
+ * レイアウトが確定していないことがあるため、requestAnimationFrameを2回
+ * 挟んでから位置を計算する。
+ */
+function scrollMemberModalToError_() {
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      const errorEl =
+        document.querySelector(
+          '#member-modal-root .member-form-error'
+        );
+
+      if (!errorEl) {
+        return;
+      }
+
+      const modalBody =
+        document.querySelector(
+          '#member-modal-root .c-modal__body'
+        );
+
+      const prefersReducedMotion =
+        window.matchMedia &&
+        window.matchMedia(
+          '(prefers-reduced-motion: reduce)'
+        ).matches;
+
+      const behavior =
+        prefersReducedMotion ? 'auto' : 'smooth';
+
+      if (
+        modalBody &&
+        modalBody.scrollHeight > modalBody.clientHeight
+      ) {
+        if (typeof modalBody.scrollTo === 'function') {
+          modalBody.scrollTo({ top: 0, behavior });
+        } else {
+          modalBody.scrollTop = 0;
+        }
+      } else if (typeof window.scrollTo === 'function') {
+        window.scrollTo({ top: 0, behavior });
+      }
+
+      errorEl.focus({ preventScroll: true });
+    });
+  });
 }
 
 
