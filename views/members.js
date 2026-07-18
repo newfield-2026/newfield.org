@@ -1554,14 +1554,14 @@ function renderMemberFields_(record, otherPayeeRecord) {
           <label class="member-form-field__label" for="mf-postal-code">
             郵便番号
           </label>
-          <input id="mf-postal-code" class="c-input" value="${escapeAttr_(r.postal_code || '')}">
+          <input id="mf-postal-code" type="text" inputmode="numeric" class="c-input" value="${escapeAttr_(String(r.postal_code || ''))}">
         </div>
 
         <div class="member-form-field">
           <label class="member-form-field__label" for="mf-phone">
             電話番号
           </label>
-          <input id="mf-phone" class="c-input" value="${escapeAttr_(r.phone || '')}">
+          <input id="mf-phone" type="tel" inputmode="tel" class="c-input" value="${escapeAttr_(String(r.phone || ''))}">
         </div>
 
         <div class="member-form-field member-form-field--wide">
@@ -1640,7 +1640,7 @@ function renderMemberFields_(record, otherPayeeRecord) {
           <label class="member-form-field__label" for="mf-company-postal-code">
             会社郵便番号
           </label>
-          <input id="mf-company-postal-code" class="c-input" value="${escapeAttr_(r.company_postal_code || '')}">
+          <input id="mf-company-postal-code" type="text" inputmode="numeric" class="c-input" value="${escapeAttr_(String(r.company_postal_code || ''))}">
         </div>
 
         <div class="member-form-field member-form-field--wide">
@@ -1654,7 +1654,7 @@ function renderMemberFields_(record, otherPayeeRecord) {
           <label class="member-form-field__label" for="mf-company-phone">
             会社電話番号
           </label>
-          <input id="mf-company-phone" class="c-input" value="${escapeAttr_(r.company_phone || '')}">
+          <input id="mf-company-phone" type="tel" inputmode="tel" class="c-input" value="${escapeAttr_(String(r.company_phone || ''))}">
         </div>
 
         <div class="member-form-field">
@@ -1747,14 +1747,14 @@ function renderOrganizationFields_(record, otherPayeeRecord) {
           <label class="member-form-field__label" for="mf-postal-code">
             郵便番号
           </label>
-          <input id="mf-postal-code" class="c-input" value="${escapeAttr_(r.postal_code || '')}">
+          <input id="mf-postal-code" type="text" inputmode="numeric" class="c-input" value="${escapeAttr_(String(r.postal_code || ''))}">
         </div>
 
         <div class="member-form-field">
           <label class="member-form-field__label" for="mf-phone">
             電話番号
           </label>
-          <input id="mf-phone" class="c-input" value="${escapeAttr_(r.phone || '')}">
+          <input id="mf-phone" type="tel" inputmode="tel" class="c-input" value="${escapeAttr_(String(r.phone || ''))}">
         </div>
 
         <div class="member-form-field member-form-field--wide">
@@ -1885,14 +1885,14 @@ function renderBillingSection_(record, otherPayeeRecord) {
             <label class="member-form-field__label" for="mf-op-postal-code">
               郵便番号
             </label>
-            <input id="mf-op-postal-code" class="c-input" value="${escapeAttr_(op.postal_code || '')}">
+            <input id="mf-op-postal-code" type="text" inputmode="numeric" class="c-input" value="${escapeAttr_(String(op.postal_code || ''))}">
           </div>
 
           <div class="member-form-field">
             <label class="member-form-field__label" for="mf-op-phone">
               電話番号
             </label>
-            <input id="mf-op-phone" class="c-input" value="${escapeAttr_(op.phone || '')}">
+            <input id="mf-op-phone" type="tel" inputmode="tel" class="c-input" value="${escapeAttr_(String(op.phone || ''))}">
           </div>
 
           <div class="member-form-field member-form-field--wide">
