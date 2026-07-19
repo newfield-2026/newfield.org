@@ -1,9 +1,16 @@
 import { api } from '../assets/js/api.js';
 import { esc, yen } from '../assets/js/components.js';
+import { go } from '../assets/js/router.js';
 
 let master = null;
 let currentInvoiceId = '';
 let currentPayee = null;
+
+/**
+ * 下書き保存成功後に内容を変更したかどうか。
+ * trueの間は発行を許可しない（古い保存内容のまま発行させないため）。
+ */
+let isDirty = false;
 
 
 /**
@@ -15,6 +22,7 @@ let currentPayee = null;
 export async function render(ctx) {
   master = await api('getInvoiceCreateMaster');
   currentInvoiceId = ctx?.invoiceId || '';
+  currentPayee = null;
 
   const fiscalYear =
     Number(master.fiscalYear) ||
@@ -362,6 +370,43 @@ export async function render(ctx) {
  * 画面イベントを設定する。
  */
 export function bind() {
+  isDirty = false;
+
+  const view =
+    document.querySelector('.invoice-create-view');
+
+  if (view) {
+    // 保存ペイロードに含まれる入力項目全般（請求先・請求区分・発行日・
+    // 支払期限・備考・明細の摘要/数量/単価/税区分・割引 等）の変更を
+    // まとめて検知する。既存の個別input/changeリスナーとは別に、
+    // 最小限の追加として親要素へ委譲する。
+    view.addEventListener(
+      'input',
+      function () {
+        isDirty = true;
+      }
+    );
+
+    view.addEventListener(
+      'change',
+      function () {
+        isDirty = true;
+      }
+    );
+
+    view.addEventListener(
+      'click',
+      function (event) {
+        if (
+          event.target.closest('#invoice-add-item') ||
+          event.target.closest('.invoice-item-delete')
+        ) {
+          isDirty = true;
+        }
+      }
+    );
+  }
+
   const invoiceType =
     document.querySelector('#invoice-type');
 
@@ -1133,6 +1178,22 @@ async function saveDraft_() {
       '下書きを保存しました。'
     );
 
+    if (currentInvoiceId) {
+      const issueButtonAfterSave =
+        document.querySelector('#invoice-issue');
+
+      if (issueButtonAfterSave) {
+        issueButtonAfterSave.style.display = '';
+        issueButtonAfterSave.disabled = false;
+        issueButtonAfterSave.textContent =
+          '請求書を発行';
+      }
+
+      updateModeIndicator_(result.invoice || {});
+    }
+
+    isDirty = false;
+
   } catch (error) {
     showError_(
       error?.message ||
@@ -1184,6 +1245,8 @@ function showError_(message) {
       ${esc(message)}
     </div>
   `;
+
+  scrollToInvoiceMessage_();
 }
 
 
@@ -1207,6 +1270,51 @@ function showSuccess_(message) {
       ${esc(message)}
     </div>
   `;
+
+  scrollToInvoiceMessage_();
+}
+
+
+/**
+ * #invoice-message内の実際のアラート要素へスクロール・フォーカスする。
+ * showSuccess_/showError_の末尾から呼ばれるため、下書き保存・発行・
+ * その他このメッセージ領域を使う処理すべてに自動的に効く。
+ */
+function scrollToInvoiceMessage_() {
+  const alertEl =
+    document.querySelector(
+      '#invoice-message .c-alert'
+    );
+
+  if (!alertEl) {
+    return;
+  }
+
+  alertEl.setAttribute('tabindex', '-1');
+
+  requestAnimationFrame(function () {
+    const prefersReducedMotion =
+      window.matchMedia &&
+      window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+      ).matches;
+
+    const behavior =
+      prefersReducedMotion ? 'auto' : 'smooth';
+
+    if (typeof alertEl.scrollIntoView === 'function') {
+      alertEl.scrollIntoView({
+        behavior: behavior,
+        block: 'start'
+      });
+    }
+
+    try {
+      alertEl.focus({ preventScroll: true });
+    } catch (error) {
+      // フォーカスに失敗しても表示・スクロールには影響させない。
+    }
+  });
 }
 
 
@@ -1384,6 +1492,8 @@ showSuccess_(
   '保存済みの下書きを編集中です。'
 );
 
+isDirty = false;
+
   } catch (error) {
     showError_(
       error?.message ||
@@ -1433,6 +1543,13 @@ async function issueInvoice_() {
     return;
   }
 
+  if (isDirty) {
+    showError_(
+      '保存されていない変更があります。先に下書きを保存してください。'
+    );
+    return;
+  }
+
   const confirmed = window.confirm(
     'この請求書を発行しますか？\n' +
     '発行後は請求書番号が採番され、下書き編集はできなくなります。'
@@ -1461,6 +1578,9 @@ async function issueInvoice_() {
     const invoiceNumber =
       result.invoice?.invoice_number || '';
 
+    const issuedInvoiceId =
+      result.invoice?.invoice_id || '';
+
     const warning =
       result.warning || '';
 
@@ -1488,6 +1608,10 @@ async function issueInvoice_() {
 
     if (saveButton) {
       saveButton.style.display = 'none';
+    }
+
+    if (issuedInvoiceId) {
+      go('invoiceDetail', { invoiceId: issuedInvoiceId });
     }
 
   } catch (error) {
