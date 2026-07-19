@@ -2750,6 +2750,9 @@ div.invoice-list-empty{
 
 .members-intro__actions{
   flex-shrink:0;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
 }
 
 .members-intro__actions .btn{
@@ -3025,6 +3028,72 @@ div.members-empty{
 
   .members-toolbar__actions .btn{
     width:100%;
+  }
+}
+
+/* ==========================================================================
+   会員台帳管理: タブ切替 (Quiet Precision)
+   role="tablist"/"tab"のbutton要素。選択状態は色だけに頼らず、
+   下線・背景・文字ウェイトの組み合わせで示す。
+   ========================================================================== */
+
+.members-tabs{
+  display:flex;
+  gap:4px;
+  margin-bottom:16px;
+  border-bottom:1px solid var(--color-border);
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+.members-tab{
+  flex-shrink:0;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:40px;
+  padding:8px 16px;
+  border:none;
+  background:transparent;
+  border-bottom:2px solid transparent;
+  border-radius:var(--radius-sm) var(--radius-sm) 0 0;
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-secondary);
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.members-tab:hover{
+  color:var(--color-text-primary);
+}
+
+.members-tab:focus-visible{
+  outline:2px solid var(--color-focus-ring);
+  outline-offset:-2px;
+}
+
+.members-tab[aria-selected="true"]{
+  color:var(--color-primary);
+  background:var(--color-primary-soft);
+  border-bottom-color:var(--color-primary);
+  font-weight:700;
+}
+
+.members-tab__count{
+  font-size:12px;
+  font-weight:600;
+  color:var(--color-text-muted);
+}
+
+.members-tab[aria-selected="true"] .members-tab__count{
+  color:var(--color-primary);
+}
+
+@media(max-width:600px){
+  .members-tab{
+    padding:8px 12px;
+    font-size:13px;
   }
 }
 

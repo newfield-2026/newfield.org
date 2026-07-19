@@ -8,6 +8,12 @@ let statusFilter = 'all';
 let masterData = null;
 let escapeHandlerBound = false;
 
+/**
+ * 現在表示中のタブ。'members'（会員・団体）| 'other'（会員外の請求先）。
+ * ページ内状態としてのみ保持し、URLやページ再読み込みには持ち越さない。
+ */
+let activeTab = 'members';
+
 
 /**
  * 会員区分コード → 表示名（getMemberManagementMasterが取得できない場合のフォールバック）。
@@ -31,7 +37,9 @@ const ACTION_LABELS_ = {
   'member.withdraw': '退会処理',
   'organization.create': '団体登録',
   'organization.update': '団体情報更新',
-  'organization.withdraw': '退会処理'
+  'organization.withdraw': '退会処理',
+  'payee.create': '請求先登録',
+  'payee.update': '請求先情報更新'
 };
 
 
@@ -77,7 +85,8 @@ const FIELD_LABELS_ = {
   contact_name: '担当者名',
   corporate_number: '法人番号',
   contact_department: '担当部署',
-  contact_position: '担当者役職'
+  contact_position: '担当者役職',
+  payee_type: '請求先種別'
 };
 
 
@@ -90,6 +99,7 @@ export async function render() {
   searchTerm = '';
   memberTypeFilter = 'all';
   statusFilter = 'all';
+  activeTab = 'members';
 
   let data;
 
@@ -114,9 +124,6 @@ export async function render() {
     masterData = { feeTypes: [], fiscalYear: null };
   }
 
-  const filteredItems =
-    getFilteredItems_();
-
   return `
     <div class="members-view">
       <div class="members-intro">
@@ -124,91 +131,263 @@ export async function render() {
           会員情報と請求先情報を確認できます。
         </p>
 
-        <div class="members-intro__actions">
-          <button
-            type="button"
-            class="btn primary"
-            id="member-add"
-          >
-            ＋ 会員を追加
-          </button>
+        <div class="members-intro__actions" id="members-intro-actions">
+          ${renderIntroActions_()}
         </div>
       </div>
 
       <div id="members-banner"></div>
 
-      <div class="members-toolbar">
-        <div class="members-toolbar__filters">
-          <input
-            id="member-q"
-            type="search"
-            class="c-input members-search"
-            placeholder="氏名・団体名・会員区分・連絡先で検索"
-            value="${escapeAttr_(searchTerm)}"
-          >
-
-          <select
-            id="member-type-filter"
-            class="c-select members-filter"
-          >
-            ${renderMemberTypeOptions_()}
-          </select>
-
-          <select
-            id="member-status-filter"
-            class="c-select members-filter"
-          >
-            ${renderStatusOptions_()}
-          </select>
-        </div>
-
-        <div class="members-toolbar__actions">
-          <button
-            type="button"
-            class="btn"
-            id="member-search"
-          >
-            検索
-          </button>
-        </div>
+      <div
+        class="members-tabs"
+        role="tablist"
+        aria-label="会員・請求先の種別"
+      >
+        ${renderTabButtons_()}
       </div>
 
       <div
-        class="members-count"
-        id="members-count"
+        id="members-panel"
+        role="tabpanel"
+        tabindex="0"
+        aria-labelledby="${activeTab === 'other' ? 'members-tab-other' : 'members-tab-members'}"
       >
-        ${esc(getCountLabel_(filteredItems))}
-      </div>
-
-      <div class="members-desktop table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>種別</th>
-              <th>名称</th>
-              <th>会員区分</th>
-              <th>連絡先</th>
-              <th>住所</th>
-              <th>状態</th>
-              <th class="members-table__actions">操作</th>
-            </tr>
-          </thead>
-
-          <tbody id="member-body">
-            ${renderRows_(filteredItems)}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="members-mobile">
-        <div id="member-cards">
-          ${renderCards_(filteredItems)}
-        </div>
+        ${renderPanel_()}
       </div>
 
       <div id="member-modal-root"></div>
     </div>
   `;
+}
+
+
+/**
+ * タブボタン（会員・団体／会員外の請求先）を作る。
+ * 件数はcurrentItems全体から算出する登録総数で、検索・絞り込みの影響は受けない。
+ *
+ * @return {string}
+ */
+function renderTabButtons_() {
+  const memberCount =
+    currentItems.filter(function (item) {
+      return matchesTab_('members', item);
+    }).length;
+
+  const otherCount =
+    currentItems.filter(function (item) {
+      return matchesTab_('other', item);
+    }).length;
+
+  return `
+    <button
+      type="button"
+      role="tab"
+      id="members-tab-members"
+      class="members-tab"
+      data-tab="members"
+      aria-selected="${activeTab === 'members' ? 'true' : 'false'}"
+      aria-controls="members-panel"
+    >
+      会員・団体
+      <span class="members-tab__count">${memberCount}件</span>
+    </button>
+
+    <button
+      type="button"
+      role="tab"
+      id="members-tab-other"
+      class="members-tab"
+      data-tab="other"
+      aria-selected="${activeTab === 'other' ? 'true' : 'false'}"
+      aria-controls="members-panel"
+    >
+      会員外の請求先
+      <span class="members-tab__count">${otherCount}件</span>
+    </button>
+  `;
+}
+
+
+/**
+ * タブに応じた右上の登録ボタンを作る。
+ *
+ * @return {string}
+ */
+function renderIntroActions_() {
+  if (activeTab === 'other') {
+    return `
+      <button type="button" class="btn primary" id="other-payee-add">
+        ＋ 会員外の請求先を登録
+      </button>
+    `;
+  }
+
+  return `
+    <button type="button" class="btn primary" id="member-add">
+      ＋ 会員を登録
+    </button>
+
+    <button type="button" class="btn primary" id="organization-add">
+      ＋ 団体を登録
+    </button>
+  `;
+}
+
+
+/**
+ * タブ内のツールバー・件数・一覧をまとめて作る。
+ * タブ切替時（見出し列が変わるため）にまるごと再描画する。
+ * 検索語・絞り込みの変更時はrefreshList_で一覧部分だけを更新するため
+ * こちらは呼ばない。
+ *
+ * @return {string}
+ */
+function renderPanel_() {
+  const filteredItems = getFilteredItems_();
+
+  return `
+    <div class="members-toolbar">
+      <div class="members-toolbar__filters">
+        <input
+          id="member-q"
+          type="search"
+          class="c-input members-search"
+          placeholder="${escapeAttr_(getSearchPlaceholder_())}"
+          value="${escapeAttr_(searchTerm)}"
+        >
+
+        ${
+          activeTab === 'members'
+            ? `
+              <select
+                id="member-type-filter"
+                class="c-select members-filter"
+              >
+                ${renderMemberTypeOptions_()}
+              </select>
+
+              <select
+                id="member-status-filter"
+                class="c-select members-filter"
+              >
+                ${renderStatusOptions_()}
+              </select>
+            `
+            : ''
+        }
+      </div>
+
+      <div class="members-toolbar__actions">
+        <button
+          type="button"
+          class="btn"
+          id="member-search"
+        >
+          検索
+        </button>
+      </div>
+    </div>
+
+    <div
+      class="members-count"
+      id="members-count"
+    >
+      ${esc(getCountLabel_(filteredItems))}
+    </div>
+
+    ${
+      activeTab === 'other'
+        ? renderOtherPayeeList_(filteredItems)
+        : renderMemberList_(filteredItems)
+    }
+  `;
+}
+
+
+/**
+ * 「会員・団体」タブの一覧（PCテーブル＋モバイルカード）を作る。
+ *
+ * @param {Array} filteredItems
+ * @return {string}
+ */
+function renderMemberList_(filteredItems) {
+  return `
+    <div class="members-desktop table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>種別</th>
+            <th>名称</th>
+            <th>会員区分</th>
+            <th>連絡先</th>
+            <th>住所</th>
+            <th>状態</th>
+            <th class="members-table__actions">操作</th>
+          </tr>
+        </thead>
+
+        <tbody id="member-body">
+          ${renderRows_(filteredItems)}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="members-mobile">
+      <div id="member-cards">
+        ${renderCards_(filteredItems)}
+      </div>
+    </div>
+  `;
+}
+
+
+/**
+ * 「会員外の請求先」タブの一覧（PCテーブル＋モバイルカード）を作る。
+ *
+ * @param {Array} filteredItems
+ * @return {string}
+ */
+function renderOtherPayeeList_(filteredItems) {
+  return `
+    <div class="members-desktop table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>請求先名</th>
+            <th>請求先種別</th>
+            <th>担当者名</th>
+            <th>電話番号</th>
+            <th>メールアドレス</th>
+            <th class="members-table__actions">操作</th>
+          </tr>
+        </thead>
+
+        <tbody id="member-body">
+          ${renderOtherPayeeRows_(filteredItems)}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="members-mobile">
+      <div id="member-cards">
+        ${renderOtherPayeeCards_(filteredItems)}
+      </div>
+    </div>
+  `;
+}
+
+
+/**
+ * タブ切替時の検索欄プレースホルダー。
+ *
+ * @return {string}
+ */
+function getSearchPlaceholder_() {
+  if (activeTab === 'other') {
+    return '請求先名・担当者名・住所・電話番号・メールで検索';
+  }
+
+  return '氏名・団体名・会員区分・連絡先で検索';
 }
 
 
@@ -224,6 +403,7 @@ function getFilteredItems_() {
 
   return currentItems.filter(function (item) {
     return (
+      itemMatchesTab_(item) &&
       itemMatchesSearch_(item, term) &&
       itemMatchesMemberType_(item) &&
       itemMatchesStatus_(item)
@@ -233,9 +413,46 @@ function getFilteredItems_() {
 
 
 /**
- * 検索語に一致するか判定する
- * （バックエンドのkeyword検索と同じ対象フィールド：
- * 氏名/団体名・電話・メール・会員区分・種別）。
+ * 指定タブの表示対象か判定する。
+ * sourceType==='other'/'otherPayee'は「会員外の請求先」タブ、
+ * 'member'/'organization'は「会員・団体」タブとして扱う。
+ *
+ * @param {string} tab 'members' | 'other'
+ * @param {Object} item
+ * @return {boolean}
+ */
+function matchesTab_(tab, item) {
+  const sourceType = String(item.sourceType || '');
+
+  if (tab === 'other') {
+    return sourceType === 'other' || sourceType === 'otherPayee';
+  }
+
+  return sourceType === 'member' || sourceType === 'organization';
+}
+
+
+/**
+ * 現在アクティブなタブの表示対象か判定する。
+ *
+ * @param {Object} item
+ * @return {boolean}
+ */
+function itemMatchesTab_(item) {
+  return matchesTab_(activeTab, item);
+}
+
+
+/**
+ * 検索語に一致するか判定する。タブごとに検索対象フィールドが異なる。
+ *
+ * 「会員・団体」タブ：氏名/団体名・電話・メール・会員区分・種別
+ * （バックエンドのkeyword検索と同じ対象フィールド）。
+ *
+ * 「会員外の請求先」タブ：請求先名・担当者名・郵便番号・住所・電話番号・
+ * メールアドレス・請求先種別・備考。ただし現在のlistPayees応答には
+ * contact_name/remarksが含まれないため、この2項目は実データがある限り
+ * 一致しない（詳細画面で取得するgetPayeeDetailには含まれる）。
  *
  * @param {Object} item
  * @param {string} term
@@ -246,14 +463,28 @@ function itemMatchesSearch_(item, term) {
     return true;
   }
 
+  const fields =
+    activeTab === 'other'
+      ? [
+          item.name,
+          item.contactName,
+          item.postalCode,
+          item.address,
+          item.phone,
+          item.email,
+          item.memberType,
+          item.remarks
+        ]
+      : [
+          item.name,
+          item.phone,
+          item.email,
+          item.memberType,
+          item.sourceType
+        ];
+
   const haystack =
-    [
-      item.name,
-      item.phone,
-      item.email,
-      item.memberType,
-      item.sourceType
-    ]
+    fields
       .map(function (value) {
         return String(value || '').toLowerCase();
       })
@@ -265,11 +496,17 @@ function itemMatchesSearch_(item, term) {
 
 /**
  * 会員区分フィルターに一致するか判定する。
+ * 「会員外の請求先」タブでは会員区分フィルター自体を表示しないため、
+ * 常にtrueを返す。
  *
  * @param {Object} item
  * @return {boolean}
  */
 function itemMatchesMemberType_(item) {
+  if (activeTab !== 'members') {
+    return true;
+  }
+
   if (memberTypeFilter === 'all') {
     return true;
   }
@@ -283,11 +520,17 @@ function itemMatchesMemberType_(item) {
 
 /**
  * 状態フィルターに一致するか判定する。
+ * 「会員外の請求先」タブでは会員状態フィルター自体を表示しないため、
+ * 常にtrueを返す。
  *
  * @param {Object} item
  * @return {boolean}
  */
 function itemMatchesStatus_(item) {
+  if (activeTab !== 'members') {
+    return true;
+  }
+
   if (statusFilter === 'all') {
     return true;
   }
@@ -312,6 +555,7 @@ function renderMemberTypeOptions_() {
     Array.from(
       new Set(
         currentItems
+          .filter(itemMatchesTab_)
           .map(function (item) {
             return String(
               item.memberType || ''
@@ -351,6 +595,7 @@ function renderStatusOptions_() {
     Array.from(
       new Set(
         currentItems
+          .filter(itemMatchesTab_)
           .map(function (item) {
             return String(
               item.status || ''
@@ -386,7 +631,7 @@ function renderStatusOptions_() {
  * @return {string}
  */
 function getCountLabel_(filteredItems) {
-  const total = currentItems.length;
+  const total = currentItems.filter(itemMatchesTab_).length;
   const filteredCount = filteredItems.length;
 
   if (!total) {
@@ -414,7 +659,9 @@ function refreshList_() {
 
   if (tbody) {
     tbody.innerHTML =
-      renderRows_(filteredItems);
+      activeTab === 'other'
+        ? renderOtherPayeeRows_(filteredItems)
+        : renderRows_(filteredItems);
   }
 
   const cardList =
@@ -422,7 +669,9 @@ function refreshList_() {
 
   if (cardList) {
     cardList.innerHTML =
-      renderCards_(filteredItems);
+      activeTab === 'other'
+        ? renderOtherPayeeCards_(filteredItems)
+        : renderCards_(filteredItems);
   }
 
   const countEl =
@@ -431,6 +680,67 @@ function refreshList_() {
   if (countEl) {
     countEl.textContent =
       getCountLabel_(filteredItems);
+  }
+}
+
+
+/**
+ * タブ切替・検索条件クリア時に、ツールバー・件数・一覧を含む
+ * パネル全体を再描画する（見出し列がタブごとに異なるため）。
+ */
+function renderPanelInPlace_() {
+  const panelEl =
+    document.querySelector('#members-panel');
+
+  if (panelEl) {
+    panelEl.innerHTML = renderPanel_();
+  }
+}
+
+
+/**
+ * タブを切り替える。検索語・絞り込み条件はタブごとにリセットする。
+ *
+ * @param {string} tab 'members' | 'other'
+ */
+function switchTab_(tab) {
+  if (tab !== 'members' && tab !== 'other') {
+    return;
+  }
+
+  if (tab === activeTab) {
+    return;
+  }
+
+  activeTab = tab;
+  searchTerm = '';
+  memberTypeFilter = 'all';
+  statusFilter = 'all';
+
+  const tabsEl =
+    document.querySelector('.members-tabs');
+
+  if (tabsEl) {
+    tabsEl.innerHTML = renderTabButtons_();
+  }
+
+  const actionsEl =
+    document.querySelector('#members-intro-actions');
+
+  if (actionsEl) {
+    actionsEl.innerHTML = renderIntroActions_();
+  }
+
+  const panelEl =
+    document.querySelector('#members-panel');
+
+  if (panelEl) {
+    panelEl.setAttribute(
+      'aria-labelledby',
+      activeTab === 'other' ? 'members-tab-other' : 'members-tab-members'
+    );
+
+    panelEl.innerHTML = renderPanel_();
   }
 }
 
@@ -460,6 +770,13 @@ async function reloadItems_() {
     return;
   }
 
+  const tabsEl =
+    document.querySelector('.members-tabs');
+
+  if (tabsEl) {
+    tabsEl.innerHTML = renderTabButtons_();
+  }
+
   refreshList_();
 }
 
@@ -468,148 +785,141 @@ async function reloadItems_() {
  * 画面イベントを設定する。
  */
 export function bind() {
-  const searchInput =
-    document.querySelector('#member-q');
-
-  const searchButton =
-    document.querySelector('#member-search');
-
-  const typeSelect =
-    document.querySelector(
-      '#member-type-filter'
-    );
-
-  const statusSelect =
-    document.querySelector(
-      '#member-status-filter'
-    );
-
-  if (searchInput) {
-    searchInput.addEventListener(
-      'input',
-      function () {
-        searchTerm = searchInput.value || '';
-        refreshList_();
-      }
-    );
-  }
-
-  if (searchButton) {
-    searchButton.addEventListener(
-      'click',
-      function () {
-        searchTerm =
-          searchInput?.value || '';
-        refreshList_();
-      }
-    );
-  }
-
-  if (typeSelect) {
-    typeSelect.addEventListener(
-      'change',
-      function () {
-        memberTypeFilter =
-          typeSelect.value || 'all';
-        refreshList_();
-      }
-    );
-  }
-
-  if (statusSelect) {
-    statusSelect.addEventListener(
-      'change',
-      function () {
-        statusFilter =
-          statusSelect.value || 'all';
-        refreshList_();
-      }
-    );
-  }
-
-  const addButton =
-    document.querySelector('#member-add');
-
-  if (addButton) {
-    addButton.addEventListener(
-      'click',
-      function () {
-        clearBanner_();
-        openMemberForm_('member', null, null);
-      }
-    );
-  }
-
   const view =
     document.querySelector('.members-view');
 
-  if (view) {
-    view.addEventListener(
-      'click',
-      function (event) {
-        const clearButton =
-          event.target.closest(
-            '.members-clear'
-          );
-
-        if (clearButton) {
-          searchTerm = '';
-          memberTypeFilter = 'all';
-          statusFilter = 'all';
-
-          if (searchInput) {
-            searchInput.value = '';
-          }
-
-          if (typeSelect) {
-            typeSelect.value = 'all';
-          }
-
-          if (statusSelect) {
-            statusSelect.value = 'all';
-          }
-
-          refreshList_();
-          return;
-        }
-
-        const actionButton =
-          event.target.closest(
-            '[data-member-action]'
-          );
-
-        if (!actionButton) {
-          return;
-        }
-
-        const action =
-          actionButton.dataset.memberAction;
-
-        const sourceType =
-          actionButton.dataset.sourceType || '';
-
-        const id =
-          actionButton.dataset.id || '';
-
-        if (action === 'detail') {
-          clearBanner_();
-          openDetailModal_(sourceType, id);
-
-        } else if (action === 'edit') {
-          clearBanner_();
-          openEditModal_(sourceType, id);
-
-        } else if (action === 'withdraw') {
-          clearBanner_();
-          openWithdrawModal_(
-            sourceType,
-            id,
-            actionButton.dataset.name || ''
-          );
-        }
-      }
-    );
+  if (!view) {
+    ensureEscapeHandlerBound_();
+    return;
   }
+
+  // タブ切替でツールバー・一覧のDOMごと再生成するため、
+  // 入力欄・セレクト・ボタンは個別要素ではなく.members-view単位で
+  // イベント委譲する（input/change/clickはすべてバブリングする）。
+
+  view.addEventListener(
+    'input',
+    function (event) {
+      if (event.target && event.target.id === 'member-q') {
+        searchTerm = event.target.value || '';
+        refreshList_();
+      }
+    }
+  );
+
+  view.addEventListener(
+    'change',
+    function (event) {
+      if (!event.target) {
+        return;
+      }
+
+      if (event.target.id === 'member-type-filter') {
+        memberTypeFilter = event.target.value || 'all';
+        refreshList_();
+        return;
+      }
+
+      if (event.target.id === 'member-status-filter') {
+        statusFilter = event.target.value || 'all';
+        refreshList_();
+      }
+    }
+  );
+
+  view.addEventListener(
+    'click',
+    function (event) {
+      const tabButton =
+        event.target.closest('.members-tab');
+
+      if (tabButton) {
+        switchTab_(tabButton.dataset.tab || '');
+        return;
+      }
+
+      if (event.target.closest('#member-search')) {
+        const searchInput =
+          document.querySelector('#member-q');
+
+        searchTerm =
+          searchInput ? (searchInput.value || '') : '';
+
+        refreshList_();
+        return;
+      }
+
+      if (event.target.closest('#member-add')) {
+        clearBanner_();
+        openMemberForm_('member', null, null);
+        return;
+      }
+
+      if (event.target.closest('#organization-add')) {
+        clearBanner_();
+        openMemberForm_('organization', null, null);
+        return;
+      }
+
+      if (event.target.closest('#other-payee-add')) {
+        clearBanner_();
+        openOtherPayeeForm_(null);
+        return;
+      }
+
+      const clearButton =
+        event.target.closest(
+          '.members-clear'
+        );
+
+      if (clearButton) {
+        searchTerm = '';
+        memberTypeFilter = 'all';
+        statusFilter = 'all';
+        renderPanelInPlace_();
+        return;
+      }
+
+      const actionButton =
+        event.target.closest(
+          '[data-member-action]'
+        );
+
+      if (!actionButton) {
+        return;
+      }
+
+      const action =
+        actionButton.dataset.memberAction;
+
+      const sourceType =
+        actionButton.dataset.sourceType || '';
+
+      const id =
+        actionButton.dataset.id || '';
+
+      if (action === 'detail') {
+        clearBanner_();
+        openDetailModal_(sourceType, id);
+
+      } else if (action === 'edit') {
+        clearBanner_();
+        openEditModal_(sourceType, id);
+
+      } else if (action === 'edit-other') {
+        clearBanner_();
+        openOtherPayeeForm_(id);
+
+      } else if (action === 'withdraw') {
+        clearBanner_();
+        openWithdrawModal_(
+          sourceType,
+          id,
+          actionButton.dataset.name || ''
+        );
+      }
+    }
+  );
 
   ensureEscapeHandlerBound_();
 }
@@ -646,14 +956,14 @@ function ensureEscapeHandlerBound_() {
  * @return {string}
  */
 function renderRows_(items) {
-  if (!currentItems.length) {
+  if (!currentItems.filter(itemMatchesTab_).length) {
     return `
       <tr>
         <td
           colspan="7"
           class="members-empty"
         >
-          会員・請求先はまだ登録されていません。
+          会員・団体はまだ登録されていません。
         </td>
       </tr>
     `;
@@ -666,7 +976,7 @@ function renderRows_(items) {
           colspan="7"
           class="members-empty"
         >
-          <p>条件に一致する会員・請求先がありません。</p>
+          <p>条件に一致する会員・団体がありません。</p>
 
           <button
             type="button"
@@ -747,10 +1057,10 @@ function renderRow_(item) {
  * @return {string}
  */
 function renderCards_(items) {
-  if (!currentItems.length) {
+  if (!currentItems.filter(itemMatchesTab_).length) {
     return `
       <div class="members-empty">
-        会員・請求先はまだ登録されていません。
+        会員・団体はまだ登録されていません。
       </div>
     `;
   }
@@ -758,7 +1068,7 @@ function renderCards_(items) {
   if (!items.length) {
     return `
       <div class="members-empty">
-        <p>条件に一致する会員・請求先がありません。</p>
+        <p>条件に一致する会員・団体がありません。</p>
 
         <button
           type="button"
@@ -775,6 +1085,250 @@ function renderCards_(items) {
       return renderCard_(item);
     })
     .join('');
+}
+
+
+/**
+ * 「会員外の請求先」タブの一覧行（PCテーブル）を作る。
+ *
+ * @param {Array} items
+ * @return {string}
+ */
+function renderOtherPayeeRows_(items) {
+  if (!currentItems.filter(itemMatchesTab_).length) {
+    return `
+      <tr>
+        <td colspan="6" class="members-empty">
+          会員外の請求先はまだ登録されていません。
+        </td>
+      </tr>
+    `;
+  }
+
+  if (!items.length) {
+    return `
+      <tr>
+        <td colspan="6" class="members-empty">
+          <p>条件に一致する会員外の請求先がありません。</p>
+
+          <button type="button" class="btn members-clear">
+            検索条件をクリア
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+
+  return items
+    .map(function (item) {
+      return renderOtherPayeeRow_(item);
+    })
+    .join('');
+}
+
+
+/**
+ * 会員外の請求先1件分の行を作る。
+ * 退会・削除ボタンは表示しない（OtherPayeesには論理削除の概念がないため）。
+ *
+ * @param {Object} item
+ * @return {string}
+ */
+function renderOtherPayeeRow_(item) {
+  const contactName = String(item.contactName || '').trim();
+  const phone = String(item.phone || '').trim();
+  const email = String(item.email || '').trim();
+  const id = String(item.id || '');
+
+  return `
+    <tr class="member-row">
+      <td data-label="請求先名" class="members-table__name">
+        ${esc(item.name || '')}
+      </td>
+
+      <td data-label="請求先種別">
+        ${
+          item.memberType
+            ? `<span class="c-badge members-badge">${esc(item.memberType)}</span>`
+            : '―'
+        }
+      </td>
+
+      <td data-label="担当者名">
+        ${
+          contactName
+            ? esc(contactName)
+            : '<span class="members-muted">未登録</span>'
+        }
+      </td>
+
+      <td data-label="電話番号" class="members-table__contact">
+        ${
+          phone
+            ? `<span class="members-contact__phone">${esc(phone)}</span>`
+            : '<span class="members-muted">未登録</span>'
+        }
+      </td>
+
+      <td data-label="メールアドレス" class="members-table__contact">
+        ${
+          email
+            ? `<span class="members-contact__email">${esc(email)}</span>`
+            : '<span class="members-muted">未登録</span>'
+        }
+      </td>
+
+      <td data-label="操作" class="members-table__actions">
+        <div class="member-row-actions">
+          <button
+            type="button"
+            class="btn"
+            data-member-action="detail"
+            data-source-type="other"
+            data-id="${escapeAttr_(id)}"
+          >
+            詳細
+          </button>
+
+          <button
+            type="button"
+            class="btn"
+            data-member-action="edit-other"
+            data-source-type="other"
+            data-id="${escapeAttr_(id)}"
+          >
+            編集
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+
+/**
+ * 「会員外の請求先」タブのモバイルカード一覧を作る。
+ *
+ * @param {Array} items
+ * @return {string}
+ */
+function renderOtherPayeeCards_(items) {
+  if (!currentItems.filter(itemMatchesTab_).length) {
+    return `
+      <div class="members-empty">
+        会員外の請求先はまだ登録されていません。
+      </div>
+    `;
+  }
+
+  if (!items.length) {
+    return `
+      <div class="members-empty">
+        <p>条件に一致する会員外の請求先がありません。</p>
+
+        <button type="button" class="btn members-clear">
+          検索条件をクリア
+        </button>
+      </div>
+    `;
+  }
+
+  return items
+    .map(function (item) {
+      return renderOtherPayeeCard_(item);
+    })
+    .join('');
+}
+
+
+/**
+ * 会員外の請求先1件分のモバイルカードを作る。
+ * 退会・削除ボタンは表示しない。
+ *
+ * @param {Object} item
+ * @return {string}
+ */
+function renderOtherPayeeCard_(item) {
+  const contactName = String(item.contactName || '').trim();
+  const phone = String(item.phone || '').trim();
+  const email = String(item.email || '').trim();
+  const id = String(item.id || '');
+
+  return `
+    <div class="member-card">
+      <div class="member-card__header">
+        <div class="member-card__name">
+          ${esc(item.name || '')}
+        </div>
+      </div>
+
+      <div class="member-card__badges">
+        <span class="c-badge members-badge">その他請求先</span>
+        ${
+          item.memberType
+            ? `<span class="c-badge members-badge">${esc(item.memberType)}</span>`
+            : ''
+        }
+      </div>
+
+      <div class="member-card__details">
+        <div class="member-card__row">
+          <span class="member-card__row-label">担当者</span>
+          <span class="member-card__row-value">
+            ${
+              contactName
+                ? esc(contactName)
+                : '<span class="members-muted">未登録</span>'
+            }
+          </span>
+        </div>
+
+        <div class="member-card__row">
+          <span class="member-card__row-label">電話</span>
+          <span class="member-card__row-value">
+            ${
+              phone
+                ? esc(phone)
+                : '<span class="members-muted">未登録</span>'
+            }
+          </span>
+        </div>
+
+        <div class="member-card__row">
+          <span class="member-card__row-label">メール</span>
+          <span class="member-card__row-value">
+            ${
+              email
+                ? esc(email)
+                : '<span class="members-muted">未登録</span>'
+            }
+          </span>
+        </div>
+      </div>
+
+      <div class="member-card__actions">
+        <button
+          type="button"
+          class="btn"
+          data-member-action="detail"
+          data-source-type="other"
+          data-id="${escapeAttr_(id)}"
+        >
+          詳細
+        </button>
+
+        <button
+          type="button"
+          class="btn"
+          data-member-action="edit-other"
+          data-source-type="other"
+          data-id="${escapeAttr_(id)}"
+        >
+          編集
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 
@@ -2154,12 +2708,7 @@ async function submitMemberForm_(
     closeModal_();
 
     const successText =
-      (existingRecord ? '保存しました。' : '登録しました。') +
-      (
-        type === 'organization'
-          ? '※現在の一覧APIの仕様上、法人・団体会員は一覧に表示されません（詳細は編集ボタンから確認できます）。'
-          : ''
-      );
+      existingRecord ? '保存しました。' : '登録しました。';
 
     showBanner_('success', successText);
 
@@ -2336,7 +2885,7 @@ async function openDetailModal_(sourceType, id) {
       ? '法人・団体会員 詳細'
       : sourceType === 'member'
         ? '個人会員 詳細'
-        : '請求先 詳細';
+        : '会員外の請求先 詳細';
 
   openModalShell_(
     '<div class="loading">読み込み中…</div>',
@@ -2404,21 +2953,26 @@ async function openDetailModal_(sourceType, id) {
 
   let historyItems = [];
 
-  if (sourceType === 'member' || sourceType === 'organization') {
-    try {
-      const historyData = await api(
-        'listEntityAuditLogs',
-        {
-          entityType: sourceType,
-          entityId: id
-        }
-      );
+  const historyEntityType =
+    sourceType === 'organization'
+      ? 'organization'
+      : sourceType === 'member'
+        ? 'member'
+        : 'other_payee';
 
-      historyItems = (historyData && historyData.items) || [];
+  try {
+    const historyData = await api(
+      'listEntityAuditLogs',
+      {
+        entityType: historyEntityType,
+        entityId: id
+      }
+    );
 
-    } catch (error) {
-      historyItems = null;
-    }
+    historyItems = (historyData && historyData.items) || [];
+
+  } catch (error) {
+    historyItems = null;
   }
 
   const bodyEl =
@@ -2450,6 +3004,10 @@ async function openDetailModal_(sourceType, id) {
 function renderDetailBody_(sourceType, record, otherPayeeRecord, historyItems) {
   const isOrganization = sourceType === 'organization';
   const isMember = sourceType === 'member';
+
+  if (!isOrganization && !isMember) {
+    return renderOtherPayeeDetailBody_(record, historyItems);
+  }
 
   const basicItems =
     isOrganization
@@ -2606,6 +3164,64 @@ function renderDetailBody_(sourceType, record, otherPayeeRecord, historyItems) {
       <div class="member-detail-section__title">備考</div>
       <div class="member-detail-item__value">
         ${remarks ? esc(remarks) : '<span class="members-muted">未登録</span>'}
+      </div>
+    </div>
+
+    <div class="member-detail-section">
+      <div class="member-detail-section__title">変更履歴</div>
+      ${renderHistorySection_(historyItems)}
+    </div>
+  `;
+}
+
+
+/**
+ * 会員外の請求先(OtherPayees)専用の詳細表示を作る。
+ * 会員番号・会員区分・入会日・退会日・会費免除などmember/organization固有の
+ * 項目はOtherPayeesに存在しないため表示しない。
+ *
+ * @param {Object} record
+ * @param {Array|null} historyItems
+ * @return {string}
+ */
+function renderOtherPayeeDetailBody_(record, historyItems) {
+  const basicItems = [
+    renderDetailItem_('請求先ID', record.payee_id),
+    renderDetailItem_('請求先種別', record.payee_type),
+    renderDetailItem_('請求先名', record.name),
+    renderDetailItem_('担当者名', record.contact_name),
+    renderDetailItem_('郵便番号', record.postal_code),
+    renderDetailItem_('住所', record.address, true),
+    renderDetailItem_('電話番号', record.phone),
+    renderDetailItem_('メールアドレス', record.email),
+    renderDetailItem_(
+      'LINE送付可否',
+      formatBoolean_(record.line_send_allowed, '可', '不可')
+    )
+  ];
+
+  const remarks = String(record.remarks || '').trim();
+
+  return `
+    <div class="member-detail-section">
+      <div class="member-detail-section__title">基本情報</div>
+      <div class="member-detail-grid">
+        ${basicItems.join('')}
+      </div>
+    </div>
+
+    <div class="member-detail-section">
+      <div class="member-detail-section__title">備考</div>
+      <div class="member-detail-item__value">
+        ${remarks ? esc(remarks) : '<span class="members-muted">未登録</span>'}
+      </div>
+    </div>
+
+    <div class="member-detail-section">
+      <div class="member-detail-section__title">登録情報</div>
+      <div class="member-detail-grid">
+        ${renderDetailItem_('登録日時', formatDateTime_(record.created_at))}
+        ${renderDetailItem_('更新日時', formatDateTime_(record.updated_at))}
       </div>
     </div>
 
@@ -3052,6 +3668,280 @@ async function submitWithdraw_(sourceType, id) {
       cancelButton.disabled = false;
     }
   }
+}
+
+
+/* ==========================================================================
+   会員外の請求先: 単独の新規登録・編集モーダル
+   請求先別住所（renderBillingSection_/buildOtherPayeePayload_）とは
+   別のDOM ID・別の関数を使い、既存の請求先別住所設定には影響しない。
+   ========================================================================== */
+
+/**
+ * 会員外の請求先(OtherPayees)の新規登録・編集モーダルを開く。
+ *
+ * @param {string|null} id 編集対象のpayee_id。新規登録時はnull。
+ */
+async function openOtherPayeeForm_(id) {
+  let record = null;
+
+  if (id) {
+    try {
+      record = await api(
+        'getPayeeDetail',
+        { sourceType: 'other', sourceId: id }
+      );
+
+    } catch (error) {
+      showBanner_(
+        'danger',
+        (error && error.message) ||
+          'データの取得に失敗しました。'
+      );
+      return;
+    }
+
+    if (!record) {
+      showBanner_(
+        'danger',
+        '対象のデータが見つかりませんでした。'
+      );
+      return;
+    }
+  }
+
+  const isEdit = Boolean(record);
+  const r = record || {};
+  const title = isEdit ? '会員外の請求先を編集' : '会員外の請求先を登録';
+
+  const bodyHtml = `
+    <div id="other-payee-form-message"></div>
+
+    <form id="other-payee-form" novalidate>
+      <div class="member-form-section">
+        <div class="member-form-grid">
+          <div class="member-form-field member-form-field--wide">
+            <label class="member-form-field__label" for="op-name">
+              請求先名<span class="member-required">必須</span>
+            </label>
+            <input id="op-name" class="c-input" value="${escapeAttr_(r.name || '')}">
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-type">
+              請求先種別
+            </label>
+            <input
+              id="op-type"
+              class="c-input"
+              value="${escapeAttr_(r.payee_type || '')}"
+              placeholder="例：法人／個人"
+            >
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-contact-name">
+              担当者名
+            </label>
+            <input id="op-contact-name" class="c-input" value="${escapeAttr_(r.contact_name || '')}">
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-postal-code">
+              郵便番号
+            </label>
+            <input id="op-postal-code" type="text" inputmode="numeric" class="c-input" value="${escapeAttr_(String(r.postal_code || ''))}">
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-phone">
+              電話番号
+            </label>
+            <input id="op-phone" type="tel" inputmode="tel" class="c-input" value="${escapeAttr_(String(r.phone || ''))}">
+          </div>
+
+          <div class="member-form-field member-form-field--wide">
+            <label class="member-form-field__label" for="op-address">
+              住所
+            </label>
+            <input id="op-address" class="c-input" value="${escapeAttr_(r.address || '')}">
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-email">
+              メールアドレス
+            </label>
+            <input id="op-email" type="email" class="c-input" value="${escapeAttr_(r.email || '')}">
+          </div>
+
+          <div class="member-form-field">
+            <label class="member-form-field__label" for="op-line">
+              LINE送付可否
+            </label>
+            ${boolSelectHtml_('op-line', r.line_send_allowed, '可', '不可', false)}
+          </div>
+
+          <div class="member-form-field member-form-field--wide">
+            <label class="member-form-field__label" for="op-remarks">
+              備考
+            </label>
+            <textarea id="op-remarks" class="c-textarea" rows="3">${esc(r.remarks || '')}</textarea>
+          </div>
+        </div>
+      </div>
+    </form>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn" id="other-payee-form-cancel">
+      キャンセル
+    </button>
+
+    <button
+      type="submit"
+      form="other-payee-form"
+      class="btn primary"
+      id="other-payee-form-submit"
+    >
+      保存する
+    </button>
+  `;
+
+  openModalShell_(
+    bodyHtml,
+    {
+      title,
+      ariaLabel: title,
+      footer: footerHtml
+    }
+  );
+
+  const cancelButton =
+    document.querySelector('#other-payee-form-cancel');
+
+  if (cancelButton) {
+    cancelButton.addEventListener(
+      'click',
+      function () {
+        closeModal_();
+      }
+    );
+  }
+
+  const form =
+    document.querySelector('#other-payee-form');
+
+  if (form) {
+    form.addEventListener(
+      'submit',
+      async function (event) {
+        event.preventDefault();
+        await submitOtherPayeeForm_(record);
+      }
+    );
+  }
+}
+
+
+/**
+ * 会員外の請求先フォームを検証し、既存のsaveOtherPayeeで保存する。
+ * 新規actionは使わない。
+ *
+ * @param {Object|null} existingRecord 編集対象（新規登録時はnull）
+ */
+async function submitOtherPayeeForm_(existingRecord) {
+  const messageEl =
+    document.querySelector('#other-payee-form-message');
+
+  const submitButton =
+    document.querySelector('#other-payee-form-submit');
+
+  const cancelButton =
+    document.querySelector('#other-payee-form-cancel');
+
+  if (messageEl) {
+    messageEl.innerHTML = '';
+  }
+
+  const name = getInputValue_('#op-name');
+
+  if (!name) {
+    setFormMessage_(messageEl, '請求先名は必須です。');
+    scrollMemberModalToError_();
+    return;
+  }
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = '保存中...';
+  }
+
+  if (cancelButton) {
+    cancelButton.disabled = true;
+  }
+
+  try {
+    const payload = buildStandaloneOtherPayeePayload_(existingRecord);
+
+    await api('saveOtherPayee', payload);
+
+    closeModal_();
+    activeTab = 'other';
+
+    showBanner_(
+      'success',
+      existingRecord
+        ? '会員外の請求先を保存しました。'
+        : '会員外の請求先を登録しました。'
+    );
+
+    await reloadItems_();
+
+  } catch (error) {
+    setFormMessage_(
+      messageEl,
+      (error && error.message) || '保存に失敗しました。'
+    );
+    scrollMemberModalToError_();
+
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = '保存する';
+    }
+
+    if (cancelButton) {
+      cancelButton.disabled = false;
+    }
+  }
+}
+
+
+/**
+ * saveOtherPayeeへ送るpayloadを作る（単独の新規登録・編集モーダル用）。
+ * 編集時はpayee_idを含め、新規登録時は既存のbuildOtherPayeePayload_と同様
+ * 空文字を送る（既存仕様に合わせる）。
+ * 電話番号・郵便番号は<input type="text">/<input type="tel">の値を
+ * そのまま文字列として使うため、数値変換や先頭0の欠落は発生しない。
+ *
+ * @param {Object|null} existingRecord
+ * @return {Object}
+ */
+function buildStandaloneOtherPayeePayload_(existingRecord) {
+  const r = existingRecord || {};
+
+  return {
+    payee_id: r.payee_id || '',
+    payee_type: getInputValue_('#op-type') || 'other',
+    name: getInputValue_('#op-name'),
+    contact_name: getInputValue_('#op-contact-name'),
+    postal_code: getInputValue_('#op-postal-code'),
+    address: getInputValue_('#op-address'),
+    phone: getInputValue_('#op-phone'),
+    email: getInputValue_('#op-email'),
+    line_send_allowed: getSelectValue_('#op-line') === 'true',
+    remarks: getInputValue_('#op-remarks')
+  };
 }
 
 

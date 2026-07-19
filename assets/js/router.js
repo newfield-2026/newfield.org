@@ -1,6 +1,6 @@
 export const routes = {
   dashboard: 'ダッシュボード',
-  members: '会員・請求先',
+  members: '会員・請求先管理',
   invoices: '請求書一覧',
   invoiceCreate: '請求書新規作成',
   invoiceDetail: '請求書詳細',
