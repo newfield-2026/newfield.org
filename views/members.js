@@ -16,6 +16,15 @@ let activeTab = 'members';
 
 
 /**
+ * 団体編集モーダルで表示中の「年度別会員数」の状態。
+ * { organizationId: string, data: Object|null } または null（会員編集時など）。
+ * data.historyには対象団体の全年度分の履歴が含まれるため、
+ * 対象年度セレクトの切り替えはAPIを呼び直さずこの中から算出する。
+ */
+let organizationCountState_ = null;
+
+
+/**
  * 会員区分コード → 表示名（getMemberManagementMasterが取得できない場合のフォールバック）。
  * Apps Script側のmemberTypeLabel_と同じ対応表。
  */
@@ -1783,6 +1792,8 @@ function closeModal_() {
   if (root) {
     root.innerHTML = '';
   }
+
+  organizationCountState_ = null;
 }
 
 
@@ -1860,6 +1871,31 @@ async function openEditModal_(sourceType, id) {
     } catch (error) {
       otherPayeeRecord = null;
     }
+  }
+
+  organizationCountState_ = null;
+
+  if (sourceType === 'organization') {
+    let memberCountsData = null;
+
+    try {
+      memberCountsData = await api(
+        'getOrganizationMemberCounts',
+        {
+          organizationId: id,
+          fiscalYear:
+            (masterData && masterData.fiscalYear) ||
+            new Date().getFullYear()
+        }
+      );
+    } catch (error) {
+      memberCountsData = null;
+    }
+
+    organizationCountState_ = {
+      organizationId: id,
+      data: memberCountsData
+    };
   }
 
   openMemberForm_(sourceType, record, otherPayeeRecord);
@@ -1980,6 +2016,7 @@ function openMemberForm_(initialType, record, otherPayeeRecord) {
       );
 
     bindBillingToggle_(fieldsContainer);
+    bindOrganizationMemberCountSection_(fieldsContainer);
   }
 
   renderFields(currentType);
@@ -2365,6 +2402,8 @@ function renderOrganizationFields_(record, otherPayeeRecord) {
     </div>
 
     ${renderBillingSection_(r, otherPayeeRecord)}
+
+    ${isEdit ? renderOrganizationMemberCountSection_() : ''}
   `;
 }
 
@@ -2496,6 +2535,557 @@ function renderBillingSection_(record, otherPayeeRecord) {
       </div>
     </div>
   `;
+}
+
+
+/**
+ * 団体編集モーダルの「年度別会員数」セクションを作る。
+ * organizationCountState_（openEditModal_で設定）を元に描画するため引数は取らない。
+ * 会員（member）編集時・団体の新規登録時は呼び出し元でスキップされる。
+ *
+ * @return {string}
+ */
+function renderOrganizationMemberCountSection_() {
+  const state = organizationCountState_;
+
+  if (!state || !state.organizationId) {
+    return '';
+  }
+
+  if (!state.data) {
+    return `
+      <div class="member-form-section" id="organization-count-section">
+        <div class="member-form-section__title">年度別会員数</div>
+        <div id="organization-count-message"></div>
+        <div class="c-alert c-alert--danger">
+          年度別会員数の取得に失敗しました。モーダルを開き直してお試しください。
+        </div>
+      </div>
+    `;
+  }
+
+  const history = state.data.history || [];
+
+  const defaultFiscalYear =
+    state.data.fiscalYear ||
+    (masterData && masterData.fiscalYear) ||
+    new Date().getFullYear();
+
+  const yearOptions =
+    buildOrganizationCountYearOptions_(defaultFiscalYear, history);
+
+  const previousRecord =
+    findOrganizationCountByYear_(history, defaultFiscalYear - 1);
+
+  return `
+    <div class="member-form-section" id="organization-count-section">
+      <div class="member-form-section__title">年度別会員数</div>
+      <div class="member-form-section__description">
+        年会費一括作成で使用する、団体の年度別会員数を年度ごとに登録します。
+      </div>
+
+      <div id="organization-count-message"></div>
+
+      <div class="member-form-grid">
+        <div class="member-form-field">
+          <label class="member-form-field__label" for="mf-count-fiscal-year">
+            対象年度
+          </label>
+          <select id="mf-count-fiscal-year" class="c-select">
+            ${
+              yearOptions
+                .map(function (year) {
+                  return `
+                    <option value="${year}" ${year === defaultFiscalYear ? 'selected' : ''}>
+                      ${year}年度
+                    </option>
+                  `;
+                })
+                .join('')
+            }
+          </select>
+        </div>
+
+        <div class="member-form-field">
+          <label class="member-form-field__label">
+            前年度人数
+          </label>
+          <div class="member-form-static" id="mf-count-previous">
+            ${formatCountValue_(previousRecord ? previousRecord.currentCount : null)}
+          </div>
+        </div>
+
+        <div class="member-form-field">
+          <label class="member-form-field__label" for="mf-count-current">
+            当年度人数<span class="member-required">必須</span>
+          </label>
+          <input
+            id="mf-count-current"
+            type="number"
+            min="0"
+            step="1"
+            inputmode="numeric"
+            class="c-input"
+            value="${escapeAttr_(currentCountInputValue_(history, defaultFiscalYear))}"
+          >
+        </div>
+
+        <div class="member-form-field">
+          <label class="member-form-field__label" for="mf-count-confirmed-at">
+            確認日<span class="member-required">必須</span>
+          </label>
+          <input
+            id="mf-count-confirmed-at"
+            type="date"
+            class="c-input"
+            value="${escapeAttr_(confirmedAtInputValue_(history, defaultFiscalYear))}"
+          >
+        </div>
+
+        <div class="member-form-field">
+          <label class="member-form-field__label">
+            確認者
+          </label>
+          <div class="member-form-static">
+            ${esc(currentLoggedInUserName_())}
+          </div>
+        </div>
+
+        <div class="member-form-field member-form-field--wide">
+          <label class="member-form-field__label" for="mf-count-remarks">
+            備考
+          </label>
+          <textarea id="mf-count-remarks" class="c-textarea" rows="2">${esc(remarksInputValue_(history, defaultFiscalYear))}</textarea>
+        </div>
+      </div>
+
+      <div class="organization-count-actions">
+        <button type="button" class="btn primary" id="organization-count-save">
+          保存する
+        </button>
+      </div>
+
+      <div class="member-form-section__title organization-count-history-title">
+        年度別履歴
+      </div>
+
+      ${renderOrganizationCountHistory_(history)}
+    </div>
+  `;
+}
+
+
+/**
+ * 年度別会員数の履歴一覧を作る（PCはテーブル、900px以下はCSSでカード表示）。
+ *
+ * @param {Array} history
+ * @return {string}
+ */
+function renderOrganizationCountHistory_(history) {
+  if (!history.length) {
+    return `
+      <p class="member-form-field__hint">
+        登録された年度別会員数はまだありません。
+      </p>
+    `;
+  }
+
+  const rows = history
+    .slice()
+    .sort(function (a, b) {
+      return b.fiscalYear - a.fiscalYear;
+    })
+    .map(function (row) {
+      return `
+        <tr class="organization-count-history__row">
+          <td data-label="年度">${esc(row.fiscalYear)}年度</td>
+          <td data-label="前年度人数">${formatCountValue_(row.previousCount)}</td>
+          <td data-label="当年度人数">${formatCountValue_(row.currentCount)}</td>
+          <td data-label="確認日">${esc(formatDate_(row.confirmedAt))}</td>
+          <td data-label="確認者">${esc(row.confirmedBy)}</td>
+          <td data-label="備考">${esc(row.remarks)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="table-wrap organization-count-history">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>年度</th>
+            <th>前年度人数</th>
+            <th>当年度人数</th>
+            <th>確認日</th>
+            <th>確認者</th>
+            <th>備考</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+/**
+ * 対象年度セレクトの選択肢を作る。中心年度の前後数年に加え、
+ * 履歴に含まれる年度（範囲外の古いデータ等）も必ず含める。
+ *
+ * @param {number} centerYear
+ * @param {Array} history
+ * @return {Array<number>}
+ */
+function buildOrganizationCountYearOptions_(centerYear, history) {
+  const years = new Set();
+
+  for (let offset = -5; offset <= 1; offset++) {
+    years.add(centerYear + offset);
+  }
+
+  history.forEach(function (row) {
+    years.add(row.fiscalYear);
+  });
+
+  return Array.from(years).sort(function (a, b) {
+    return b - a;
+  });
+}
+
+
+/**
+ * 履歴から指定年度のレコードを探す。
+ *
+ * @param {Array} history
+ * @param {number} year
+ * @return {Object|null}
+ */
+function findOrganizationCountByYear_(history, year) {
+  return history.find(function (row) {
+    return row.fiscalYear === year;
+  }) || null;
+}
+
+
+/**
+ * 会員数表示用の文字列を作る。未登録（null）と0名を区別する。
+ *
+ * @param {number|null} value
+ * @return {string}
+ */
+function formatCountValue_(value) {
+  return value === null || typeof value === 'undefined'
+    ? '―'
+    : esc(value) + '名';
+}
+
+
+/**
+ * 「当年度人数」入力欄の初期値。未登録の場合は空欄にする（0名との混同を避ける）。
+ *
+ * @param {Array} history
+ * @param {number} year
+ * @return {string}
+ */
+function currentCountInputValue_(history, year) {
+  const record = findOrganizationCountByYear_(history, year);
+  return record && record.currentCount !== null
+    ? String(record.currentCount)
+    : '';
+}
+
+
+/**
+ * 「確認日」入力欄の初期値。既存データがなければ当日を初期値にする。
+ *
+ * @param {Array} history
+ * @param {number} year
+ * @return {string}
+ */
+function confirmedAtInputValue_(history, year) {
+  const record = findOrganizationCountByYear_(history, year);
+  return record && record.confirmedAt
+    ? toDateInputValue_(record.confirmedAt)
+    : getTodayString_();
+}
+
+
+/**
+ * 「備考」入力欄の初期値。
+ *
+ * @param {Array} history
+ * @param {number} year
+ * @return {string}
+ */
+function remarksInputValue_(history, year) {
+  const record = findOrganizationCountByYear_(history, year);
+  return record ? (record.remarks || '') : '';
+}
+
+
+/**
+ * ログイン中ユーザーの表示名。サイドバーに既に描画されている値を再利用し、
+ * API呼び出しを追加しない。
+ *
+ * @return {string}
+ */
+function currentLoggedInUserName_() {
+  const el = document.querySelector('.sidebar-user__name');
+  return el ? el.textContent.trim() : '';
+}
+
+
+/**
+ * 「年度別会員数」セクションのイベントを登録する。
+ * フォーム項目を再描画するたびに呼び直す。セクションが無い場合は何もしない。
+ *
+ * @param {HTMLElement} container
+ */
+function bindOrganizationMemberCountSection_(container) {
+  if (!container) {
+    return;
+  }
+
+  const section =
+    container.querySelector('#organization-count-section');
+
+  if (!section) {
+    return;
+  }
+
+  const yearSelect =
+    section.querySelector('#mf-count-fiscal-year');
+
+  if (yearSelect) {
+    yearSelect.addEventListener(
+      'change',
+      function () {
+        updateOrganizationCountFormForYear_(
+          Number(yearSelect.value)
+        );
+      }
+    );
+  }
+
+  const saveButton =
+    section.querySelector('#organization-count-save');
+
+  if (saveButton) {
+    saveButton.addEventListener(
+      'click',
+      function () {
+        submitOrganizationMemberCount_();
+      }
+    );
+  }
+}
+
+
+/**
+ * 対象年度セレクトの変更に合わせて、前年度人数・当年度人数・確認日・備考を
+ * キャッシュ済みの履歴（organizationCountState_.data.history）から再表示する。
+ * APIは呼び直さない。
+ *
+ * @param {number} year
+ */
+function updateOrganizationCountFormForYear_(year) {
+  const state = organizationCountState_;
+
+  if (!state || !state.data) {
+    return;
+  }
+
+  const history = state.data.history || [];
+
+  const previousEl =
+    document.querySelector('#mf-count-previous');
+
+  if (previousEl) {
+    const previousRecord =
+      findOrganizationCountByYear_(history, year - 1);
+
+    previousEl.textContent =
+      formatCountValue_(
+        previousRecord ? previousRecord.currentCount : null
+      );
+  }
+
+  const currentInput =
+    document.querySelector('#mf-count-current');
+
+  if (currentInput) {
+    currentInput.value =
+      currentCountInputValue_(history, year);
+  }
+
+  const confirmedAtInput =
+    document.querySelector('#mf-count-confirmed-at');
+
+  if (confirmedAtInput) {
+    confirmedAtInput.value =
+      confirmedAtInputValue_(history, year);
+  }
+
+  const remarksInput =
+    document.querySelector('#mf-count-remarks');
+
+  if (remarksInput) {
+    remarksInput.value =
+      remarksInputValue_(history, year);
+  }
+}
+
+
+/**
+ * 「年度別会員数」セクションのメッセージ表示を更新する。
+ *
+ * @param {HTMLElement} el
+ * @param {string} text
+ * @param {string} [type] 'success' | 省略時はエラー扱い
+ */
+function setOrganizationCountMessage_(el, text, type) {
+  if (!el) {
+    return;
+  }
+
+  if (!text) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const cssClass =
+    type === 'success'
+      ? 'c-alert--success'
+      : 'c-alert--danger';
+
+  el.innerHTML = `
+    <div class="c-alert ${cssClass}">
+      ${esc(text)}
+    </div>
+  `;
+}
+
+
+/**
+ * 「年度別会員数」セクションを検証し、保存する。
+ * 保存後は履歴を再取得し、セクションのみを再描画する
+ * （モーダルは閉じず、ページ全体の再読み込みもしない）。
+ */
+async function submitOrganizationMemberCount_() {
+  const state = organizationCountState_;
+
+  if (!state || !state.organizationId) {
+    return;
+  }
+
+  const messageEl =
+    document.querySelector('#organization-count-message');
+
+  const saveButton =
+    document.querySelector('#organization-count-save');
+
+  if (messageEl) {
+    messageEl.innerHTML = '';
+  }
+
+  const yearSelect =
+    document.querySelector('#mf-count-fiscal-year');
+
+  const fiscalYear =
+    yearSelect ? Number(yearSelect.value) : NaN;
+
+  const currentCountRaw =
+    getInputValue_('#mf-count-current');
+
+  const confirmedAt =
+    getInputValue_('#mf-count-confirmed-at');
+
+  const remarks =
+    getInputValue_('#mf-count-remarks');
+
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 2000) {
+    setOrganizationCountMessage_(messageEl, '対象年度が不正です。');
+    return;
+  }
+
+  if (currentCountRaw === '' || !/^\d+$/.test(currentCountRaw)) {
+    setOrganizationCountMessage_(
+      messageEl,
+      '団体会員数は0以上の整数で入力してください。'
+    );
+    return;
+  }
+
+  if (!confirmedAt) {
+    setOrganizationCountMessage_(messageEl, '確認日を入力してください。');
+    return;
+  }
+
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = '保存中...';
+  }
+
+  try {
+    await api(
+      'saveOrganizationMemberCount',
+      {
+        organization_id: state.organizationId,
+        fiscal_year: fiscalYear,
+        current_count: Number(currentCountRaw),
+        confirmed_at: confirmedAt,
+        remarks: remarks
+      }
+    );
+
+    let refreshed = null;
+
+    try {
+      refreshed = await api(
+        'getOrganizationMemberCounts',
+        {
+          organizationId: state.organizationId,
+          fiscalYear: fiscalYear
+        }
+      );
+    } catch (error) {
+      refreshed = null;
+    }
+
+    organizationCountState_ = {
+      organizationId: state.organizationId,
+      data: refreshed
+    };
+
+    const section =
+      document.querySelector('#organization-count-section');
+
+    if (section) {
+      section.outerHTML = renderOrganizationMemberCountSection_();
+
+      bindOrganizationMemberCountSection_(
+        document.querySelector('#member-form-fields')
+      );
+    }
+
+    setOrganizationCountMessage_(
+      document.querySelector('#organization-count-message'),
+      `${fiscalYear}年度の団体会員数を保存しました。`,
+      'success'
+    );
+
+  } catch (error) {
+    setOrganizationCountMessage_(
+      messageEl,
+      (error && error.message) || '団体会員数の保存に失敗しました。'
+    );
+
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = '保存する';
+    }
+  }
 }
 
 

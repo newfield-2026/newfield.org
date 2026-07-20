@@ -23,8 +23,20 @@ export async function render(ctx) {
     }
   );
 
+  return buildAnnualFeesViewHtml_(currentData);
+}
+
+
+/**
+ * 画面本体のHTMLを作る。renderからの初回表示と、
+ * 「人数を登録」保存後の部分更新（refreshCandidates_）の両方から使う。
+ *
+ * @param {Object} data getAnnualFeeBatchMaster/refreshAnnualFeeCandidatesの戻り値
+ * @return {string}
+ */
+function buildAnnualFeesViewHtml_(data) {
   const candidates =
-    currentData.candidates || [];
+    data.candidates || [];
 
   const summary =
     summarizeCandidates_(candidates);
@@ -38,7 +50,7 @@ export async function render(ctx) {
       </div>
 
       <div class="c-alert c-alert--warning annual-fees-notice">
-        ${esc(currentData.fiscalYear || '')}年度の対象会員へ、年会費請求書をまとめて下書き作成します。
+        ${esc(data.fiscalYear || '')}年度の対象会員へ、年会費請求書をまとめて下書き作成します。
         既に請求書がある会員は自動的に対象から除外されます。
         作成される請求書は下書きとして登録され、発行は別途行います。
       </div>
@@ -53,27 +65,27 @@ export async function render(ctx) {
         <div class="annual-fees-grid">
           ${renderInfo_(
             '対象年度',
-            currentData.fiscalYear
+            data.fiscalYear
           )}
 
           ${renderInfo_(
             '対象期間',
-            currentData.fiscalPeriod
+            data.fiscalPeriod
           )}
 
           ${renderInfo_(
             '発行予定日',
-            currentData.issueDate
+            data.issueDate
           )}
 
           ${renderInfo_(
             '支払期限',
-            currentData.dueDate
+            data.dueDate
           )}
 
           ${renderInfo_(
             '件名',
-            currentData.subject
+            data.subject
           )}
         </div>
       </div>
@@ -163,8 +175,38 @@ export async function render(ctx) {
           </button>
         </div>
       </div>
+
+      <div id="annual-fee-count-modal-root"></div>
     </div>
   `;
+}
+
+
+/**
+ * 候補データを再取得し、画面を部分更新する
+ * （ページ全体のリロードはしない）。
+ *
+ * @return {Promise<void>}
+ */
+async function refreshCandidates_() {
+  const container =
+    document.querySelector('.annual-fees-view');
+
+  if (!container) {
+    return;
+  }
+
+  currentData = await api(
+    'getAnnualFeeBatchMaster',
+    {
+      fiscalYear: currentData.fiscalYear
+    }
+  );
+
+  container.outerHTML =
+    buildAnnualFeesViewHtml_(currentData);
+
+  bind();
 }
 
 
@@ -172,6 +214,15 @@ export async function render(ctx) {
  * イベントを設定する。
  */
 export function bind() {
+  bindCreateButton_();
+  bindRegisterCountButtons_();
+}
+
+
+/**
+ * 「選択した対象を下書き作成」ボタンのイベントを設定する。
+ */
+function bindCreateButton_() {
   const button =
     document.querySelector(
       '.annual-fee-create'
@@ -328,6 +379,27 @@ export function bind() {
 
 
 /**
+ * 「人数を登録」ボタンのイベントを設定する。
+ * 候補一覧を再描画するたびに呼び直す。
+ */
+function bindRegisterCountButtons_() {
+  document
+    .querySelectorAll('.annual-fee-register-count')
+    .forEach(function (button) {
+      button.addEventListener(
+        'click',
+        function () {
+          openRegisterCountModal_(
+            button.dataset.organizationId,
+            button.dataset.organizationName
+          );
+        }
+      );
+    });
+}
+
+
+/**
  * 実行結果表示をクリアする。
  */
 function clearResult_() {
@@ -360,6 +432,29 @@ function showResultError_(message) {
 
   target.innerHTML = `
     <div class="c-alert c-alert--danger annual-fees-error">
+      ${esc(message)}
+    </div>
+  `;
+}
+
+
+/**
+ * 実行結果エリアへ成功メッセージを表示する。
+ *
+ * @param {string} message
+ */
+function showResultSuccess_(message) {
+  const target =
+    document.querySelector(
+      '#annual-fees-result'
+    );
+
+  if (!target) {
+    return;
+  }
+
+  target.innerHTML = `
+    <div class="c-alert c-alert--success annual-fees-success">
       ${esc(message)}
     </div>
   `;
@@ -580,6 +675,21 @@ function renderCandidateRows_(
               candidate.message ||
               ''
             )}
+            ${
+              candidate.status === 'needs_count' &&
+              candidate.sourceType === 'organization'
+                ? `
+                  <button
+                    type="button"
+                    class="btn annual-fee-register-count"
+                    data-organization-id="${escapeAttr_(candidate.sourceId)}"
+                    data-organization-name="${escapeAttr_(candidate.name)}"
+                  >
+                    人数を登録
+                  </button>
+                `
+                : ''
+            }
           </td>
 
           <td data-label="金額" class="annual-fees-amount">
@@ -698,4 +808,435 @@ function escapeAttr_(value) {
       /`/g,
       '&#96;'
     );
+}
+
+
+/* ==========================================================================
+   「人数を登録」モーダル（会員数未確認の団体を、この画面から確定させる）
+   ========================================================================== */
+
+/**
+ * 今日の日付をyyyy-MM-dd形式で返す。
+ *
+ * @return {string}
+ */
+function getTodayString_() {
+  const date = new Date();
+  const year = date.getFullYear();
+
+  const month =
+    String(date.getMonth() + 1).padStart(2, '0');
+
+  const day =
+    String(date.getDate()).padStart(2, '0');
+
+  return [year, month, day].join('-');
+}
+
+
+/**
+ * 団体の年度別会員数を取得し、「人数を登録」モーダルを開く。
+ *
+ * @param {string} organizationId
+ * @param {string} organizationName
+ */
+async function openRegisterCountModal_(
+  organizationId,
+  organizationName
+) {
+  const fiscalYear = currentData.fiscalYear;
+
+  let data;
+
+  try {
+    data = await api(
+      'getOrganizationMemberCounts',
+      {
+        organizationId: organizationId,
+        fiscalYear: fiscalYear
+      }
+    );
+  } catch (error) {
+    alert(
+      (error && error.message) ||
+      '年度別会員数の取得に失敗しました。'
+    );
+    return;
+  }
+
+  const history = data.history || [];
+
+  const previousRecord =
+    history.find(function (row) {
+      return row.fiscalYear === fiscalYear - 1;
+    }) || null;
+
+  const previousCount =
+    previousRecord ? previousRecord.currentCount : null;
+
+  renderRegisterCountModal_(
+    organizationId,
+    organizationName,
+    fiscalYear,
+    previousCount,
+    data.current || null
+  );
+}
+
+
+/**
+ * 「人数を登録」モーダルを描画する。
+ *
+ * @param {string} organizationId
+ * @param {string} organizationName
+ * @param {number} fiscalYear
+ * @param {number|null} previousCount
+ * @param {Object|null} current
+ */
+function renderRegisterCountModal_(
+  organizationId,
+  organizationName,
+  fiscalYear,
+  previousCount,
+  current
+) {
+  const currentCountValue =
+    current && current.currentCount !== null
+      ? String(current.currentCount)
+      : '';
+
+  const confirmedAtValue =
+    current && current.confirmedAt
+      ? current.confirmedAt.slice(0, 10)
+      : getTodayString_();
+
+  const remarksValue =
+    current ? (current.remarks || '') : '';
+
+  const bodyHtml = `
+    <div id="annual-fee-count-message"></div>
+
+    <div class="member-form-grid">
+      <div class="member-form-field member-form-field--wide">
+        <label class="member-form-field__label">団体名</label>
+        <div class="member-form-static">${esc(organizationName)}</div>
+      </div>
+
+      <div class="member-form-field">
+        <label class="member-form-field__label">対象年度</label>
+        <div class="member-form-static">${esc(fiscalYear)}年度</div>
+      </div>
+
+      <div class="member-form-field">
+        <label class="member-form-field__label">前年度人数</label>
+        <div class="member-form-static">
+          ${previousCount === null ? '―' : esc(previousCount) + '名'}
+        </div>
+      </div>
+
+      <div class="member-form-field">
+        <label class="member-form-field__label" for="afc-current">
+          当年度人数<span class="member-required">必須</span>
+        </label>
+        <input
+          id="afc-current"
+          type="number"
+          min="0"
+          step="1"
+          inputmode="numeric"
+          class="c-input"
+          value="${escapeAttr_(currentCountValue)}"
+        >
+      </div>
+
+      <div class="member-form-field">
+        <label class="member-form-field__label" for="afc-confirmed-at">
+          確認日<span class="member-required">必須</span>
+        </label>
+        <input
+          id="afc-confirmed-at"
+          type="date"
+          class="c-input"
+          value="${escapeAttr_(confirmedAtValue)}"
+        >
+      </div>
+
+      <div class="member-form-field member-form-field--wide">
+        <label class="member-form-field__label" for="afc-remarks">備考</label>
+        <textarea id="afc-remarks" class="c-textarea" rows="2">${esc(remarksValue)}</textarea>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <button type="button" class="btn" id="annual-fee-count-cancel">
+      キャンセル
+    </button>
+
+    <button type="button" class="btn primary" id="annual-fee-count-save">
+      保存
+    </button>
+  `;
+
+  openCountModalShell_(
+    bodyHtml,
+    {
+      title: '人数を登録',
+      ariaLabel: `${organizationName}の年度別会員数を登録`,
+      footer: footerHtml
+    }
+  );
+
+  const cancelButton =
+    document.querySelector('#annual-fee-count-cancel');
+
+  if (cancelButton) {
+    cancelButton.addEventListener(
+      'click',
+      function () {
+        closeCountModal_();
+      }
+    );
+  }
+
+  const saveButton =
+    document.querySelector('#annual-fee-count-save');
+
+  if (saveButton) {
+    saveButton.addEventListener(
+      'click',
+      function () {
+        submitRegisterCount_(
+          organizationId,
+          fiscalYear,
+          saveButton,
+          cancelButton
+        );
+      }
+    );
+  }
+}
+
+
+/**
+ * モーダルの入力内容を検証し、団体の年度別会員数を保存する。
+ * 保存後はモーダルを閉じ、候補一覧を再取得して部分更新する
+ * （ページ全体のリロードはしない）。
+ *
+ * @param {string} organizationId
+ * @param {number} fiscalYear
+ * @param {HTMLButtonElement} saveButton
+ * @param {HTMLButtonElement} cancelButton
+ */
+async function submitRegisterCount_(
+  organizationId,
+  fiscalYear,
+  saveButton,
+  cancelButton
+) {
+  const messageEl =
+    document.querySelector('#annual-fee-count-message');
+
+  if (messageEl) {
+    messageEl.innerHTML = '';
+  }
+
+  const currentCountRaw =
+    getModalInputValue_('#afc-current');
+
+  const confirmedAt =
+    getModalInputValue_('#afc-confirmed-at');
+
+  const remarks =
+    getModalInputValue_('#afc-remarks');
+
+  if (
+    currentCountRaw === '' ||
+    !/^\d+$/.test(currentCountRaw)
+  ) {
+    setCountModalMessage_(
+      messageEl,
+      '団体会員数は0以上の整数で入力してください。'
+    );
+    return;
+  }
+
+  if (!confirmedAt) {
+    setCountModalMessage_(messageEl, '確認日を入力してください。');
+    return;
+  }
+
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = '保存中...';
+  }
+
+  if (cancelButton) {
+    cancelButton.disabled = true;
+  }
+
+  try {
+    await api(
+      'saveOrganizationMemberCount',
+      {
+        organization_id: organizationId,
+        fiscal_year: fiscalYear,
+        current_count: Number(currentCountRaw),
+        confirmed_at: confirmedAt,
+        remarks: remarks
+      }
+    );
+
+    closeCountModal_();
+
+    await refreshCandidates_();
+
+    showResultSuccess_(
+      `${fiscalYear}年度の団体会員数を登録しました。`
+    );
+
+  } catch (error) {
+    setCountModalMessage_(
+      messageEl,
+      (error && error.message) ||
+      '団体会員数の保存に失敗しました。'
+    );
+
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = '保存';
+    }
+
+    if (cancelButton) {
+      cancelButton.disabled = false;
+    }
+  }
+}
+
+
+/**
+ * モーダル内の入力要素から値を取得する。
+ *
+ * @param {string} selector
+ * @return {string}
+ */
+function getModalInputValue_(selector) {
+  const el = document.querySelector(selector);
+  return el ? String(el.value || '').trim() : '';
+}
+
+
+/**
+ * 「人数を登録」モーダルのメッセージ表示を更新する。
+ *
+ * @param {HTMLElement} el
+ * @param {string} text
+ */
+function setCountModalMessage_(el, text) {
+  if (!el) {
+    return;
+  }
+
+  el.innerHTML = text
+    ? `
+      <div class="c-alert c-alert--danger">
+        ${esc(text)}
+      </div>
+    `
+    : '';
+}
+
+
+/**
+ * 「人数を登録」モーダルの外枠を描画する。
+ * members.jsのopenModalShell_と同じ見た目（c-modal-overlay/c-modal）を
+ * この画面専用のモーダルルート（#annual-fee-count-modal-root）に描画する。
+ *
+ * @param {string} bodyHtml
+ * @param {{title:string, ariaLabel?:string, footer?:string}} options
+ */
+function openCountModalShell_(bodyHtml, options) {
+  const root =
+    document.querySelector('#annual-fee-count-modal-root');
+
+  if (!root) {
+    return;
+  }
+
+  const opts = options || {};
+
+  root.innerHTML = `
+    <div class="c-modal-overlay" id="annual-fee-count-modal-overlay">
+      <div
+        class="c-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="${escapeAttr_(opts.ariaLabel || opts.title || '')}"
+      >
+        <div class="c-modal__header">
+          <div class="c-modal__heading">
+            <div class="c-modal__title">${esc(opts.title || '')}</div>
+          </div>
+
+          <button
+            type="button"
+            class="c-modal__close"
+            id="annual-fee-count-modal-close"
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="c-modal__body">
+          ${bodyHtml}
+        </div>
+
+        ${
+          opts.footer
+            ? `<div class="c-modal__footer">${opts.footer}</div>`
+            : ''
+        }
+      </div>
+    </div>
+  `;
+
+  const overlay =
+    document.querySelector('#annual-fee-count-modal-overlay');
+
+  const closeButton =
+    document.querySelector('#annual-fee-count-modal-close');
+
+  if (overlay) {
+    overlay.addEventListener(
+      'click',
+      function (event) {
+        if (event.target === overlay) {
+          closeCountModal_();
+        }
+      }
+    );
+  }
+
+  if (closeButton) {
+    closeButton.addEventListener(
+      'click',
+      function () {
+        closeCountModal_();
+      }
+    );
+  }
+}
+
+
+/**
+ * 開いている「人数を登録」モーダルを閉じる。
+ */
+function closeCountModal_() {
+  const root =
+    document.querySelector('#annual-fee-count-modal-root');
+
+  if (root) {
+    root.innerHTML = '';
+  }
 }

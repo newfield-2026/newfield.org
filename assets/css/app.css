@@ -2531,6 +2531,15 @@ div.invoice-list-empty{
   margin-bottom:20px;
 }
 
+.annual-fees-success{
+  margin-bottom:20px;
+}
+
+.annual-fee-register-count{
+  display:block;
+  margin-top:8px;
+}
+
 .annual-fees-section{
   margin-top:20px;
   background:var(--color-surface);
@@ -3685,4 +3694,68 @@ div.members-empty{
 
 .member-withdraw-target strong{
   color:var(--color-text-primary);
+}
+
+/* ==========================================================================
+   会員台帳管理: 団体の年度別会員数 (Quiet Precision)
+   既存の.member-form-section/.member-form-grid/.c-modal等を再利用し、
+   新規クラスは配置調整の最小限のみ追加する。
+   ========================================================================== */
+
+.organization-count-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:14px;
+}
+
+.organization-count-history-title{
+  margin-top:20px;
+}
+
+.organization-count-history table th,
+.organization-count-history table td{
+  white-space:normal;
+}
+
+@media(max-width:900px){
+  .organization-count-history table,
+  .organization-count-history thead,
+  .organization-count-history tbody{
+    display:block;
+  }
+
+  .organization-count-history thead{
+    display:none;
+  }
+
+  .organization-count-history tr.organization-count-history__row{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    background:var(--color-surface);
+    border:1px solid var(--color-border);
+    border-radius:var(--radius-sm);
+    padding:14px;
+    margin-bottom:12px;
+  }
+
+  .organization-count-history tr.organization-count-history__row:last-child{
+    margin-bottom:0;
+  }
+
+  .organization-count-history td{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    padding:0;
+    min-width:0;
+    border-bottom:none;
+  }
+
+  .organization-count-history td::before{
+    content:attr(data-label);
+    font-size:12px;
+    font-weight:600;
+    color:var(--color-text-muted);
+  }
 }
