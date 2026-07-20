@@ -2661,7 +2661,7 @@ function renderOrganizationMemberCountSection_() {
 
       <div class="organization-count-actions">
         <button type="button" class="btn primary" id="organization-count-save">
-          保存する
+          人数を保存
         </button>
       </div>
 
@@ -3083,7 +3083,7 @@ async function submitOrganizationMemberCount_() {
 
     if (saveButton) {
       saveButton.disabled = false;
-      saveButton.textContent = '保存する';
+      saveButton.textContent = '人数を保存';
     }
   }
 }
