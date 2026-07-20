@@ -2052,6 +2052,96 @@ div.invoice-list-empty{
   margin-bottom:20px;
 }
 
+/* ==========================================================================
+   請求書作成: 年会費自動入力の計算根拠・重複警告表示 (Quiet Precision)
+   既存の.invoice-create-*/.c-alertは変更せず、新規クラスのみ追加する。
+   色だけでなく見出し・記号・文字ウェイトでも状態を区別する。
+   ========================================================================== */
+
+.invoice-annual-fee-info[hidden],
+.invoice-annual-fee-duplicate[hidden]{
+  display:none;
+}
+
+.invoice-annual-fee-info{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin-bottom:16px;
+  padding:10px 14px;
+  border-radius:var(--radius-sm);
+  border:1px solid var(--color-border);
+  background:var(--color-bg);
+  font-size:13px;
+}
+
+.invoice-annual-fee-info__icon{
+  flex-shrink:0;
+  font-weight:700;
+  line-height:1.5;
+}
+
+.invoice-annual-fee-info__text{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+
+.invoice-annual-fee-info__heading{
+  font-weight:700;
+  color:var(--color-text-primary);
+}
+
+.invoice-annual-fee-info__body{
+  color:var(--color-text-secondary);
+  overflow-wrap:anywhere;
+}
+
+.invoice-annual-fee-info--loading .invoice-annual-fee-info__icon{
+  color:var(--color-text-muted);
+}
+
+.invoice-annual-fee-info--success{
+  background:var(--color-success-bg);
+  border-color:var(--color-success-border);
+}
+
+.invoice-annual-fee-info--success .invoice-annual-fee-info__icon{
+  color:var(--color-success);
+}
+
+.invoice-annual-fee-info--warning{
+  background:var(--color-warning-bg);
+  border-color:var(--color-warning-border);
+}
+
+.invoice-annual-fee-info--warning .invoice-annual-fee-info__icon{
+  color:var(--color-warning);
+}
+
+.invoice-annual-fee-info--error{
+  background:var(--color-danger-bg);
+  border-color:var(--color-danger-border);
+}
+
+.invoice-annual-fee-info--error .invoice-annual-fee-info__icon{
+  color:var(--color-danger);
+}
+
+.invoice-annual-fee-info--exempt{
+  background:var(--color-bg);
+  border-color:var(--color-border-strong);
+}
+
+.invoice-annual-fee-info--exempt .invoice-annual-fee-info__icon{
+  color:var(--color-text-muted);
+}
+
+.invoice-annual-fee-duplicate .c-alert{
+  margin-bottom:16px;
+}
+
 .invoice-create-section__title{
   font-size:17px;
   font-weight:700;

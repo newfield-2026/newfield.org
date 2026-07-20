@@ -12,6 +12,20 @@ let currentPayee = null;
  */
 let isDirty = false;
 
+/**
+ * 年会費自動計算のリクエスト通し番号。
+ * 短時間に連続して請求先・請求区分・会計年度が変更された場合、
+ * 呼び出し時点の番号と現在の番号が一致するレスポンスだけを反映する。
+ */
+let annualFeeRequestToken = 0;
+
+/**
+ * 「入力済みの明細を年会費の内容に置き換えますか？」を一度キャンセルした
+ * 組み合わせ（sourceType|sourceId|fiscalYear）。同じ組み合わせのままでは
+ * 再度確認しない。
+ */
+let annualFeeDeclinedKey = '';
+
 
 /**
  * 請求書新規作成画面
@@ -216,6 +230,18 @@ export async function render(ctx) {
             </div>
           </div>
         </div>
+
+        <div
+          id="invoice-annual-fee-info"
+          class="invoice-annual-fee-info"
+          hidden
+        ></div>
+
+        <div
+          id="invoice-annual-fee-duplicate"
+          class="invoice-annual-fee-duplicate"
+          hidden
+        ></div>
 
         <div class="invoice-create-items table-wrap">
           <table class="table">
@@ -483,6 +509,7 @@ export function bind() {
         '';
 
       clearMessage_();
+      clearAnnualFeeInfo_();
       addItemRow_();
       recalc_();
     });
@@ -581,6 +608,7 @@ function onPayeeChange_() {
       true
     );
 
+    maybeUpdateAnnualFee_();
     return;
   }
 
@@ -607,6 +635,7 @@ function onPayeeChange_() {
       true
     );
 
+    maybeUpdateAnnualFee_();
     return;
   }
 
@@ -621,6 +650,8 @@ function onPayeeChange_() {
     details.join(' / '),
     false
   );
+
+  maybeUpdateAnnualFee_();
 }
 
 
@@ -679,6 +710,8 @@ function onInvoiceTypeChange_() {
   document.querySelector(
     '#invoice-subject'
   ).value = subject;
+
+  maybeUpdateAnnualFee_();
 }
 
 
@@ -723,6 +756,448 @@ function setDefaultDueDate_() {
   ).value = formatDateInput_(dueDate);
 
   onInvoiceTypeChange_();
+}
+
+
+/* ==========================================================================
+   年会費自動入力
+   既存のgetInvoicePayeeSnapshot API（Apps Script側のbuildAnnualFeeProposal_・
+   findAnnualFeeDuplicate_をそのまま利用）を呼ぶだけで、金額計算・会費区分の
+   判定・免除判定・団体構成員数の扱いはフロントでは一切行わない。
+   ========================================================================== */
+
+/**
+ * 請求区分・請求先・会計年度の状態に応じて年会費を再計算する。
+ * 短時間に連続して呼ばれても、最後に発行したリクエストの結果だけを反映する。
+ *
+ * @param {{skipItemReplace?: boolean}=} options
+ *   skipItemReplaceがtrueの場合、計算根拠・重複警告の表示は更新するが、
+ *   明細の自動入力・上書き確認は行わない（下書き読込直後に使う）。
+ */
+async function maybeUpdateAnnualFee_(options) {
+  const opts = options || {};
+
+  const invoiceType =
+    document.querySelector('#invoice-type')?.value || '';
+
+  if (invoiceType !== 'annual_fee') {
+    clearAnnualFeeInfo_();
+    return;
+  }
+
+  if (
+    !currentPayee ||
+    !currentPayee.type ||
+    !currentPayee.id ||
+    (
+      currentPayee.type !== 'member' &&
+      currentPayee.type !== 'organization'
+    )
+  ) {
+    clearAnnualFeeInfo_();
+    return;
+  }
+
+  const fiscalYear = Number(
+    document.querySelector('#invoice-fiscal-year')?.value || 0
+  );
+
+  if (!fiscalYear) {
+    clearAnnualFeeInfo_();
+    return;
+  }
+
+  const requestKey =
+    currentPayee.type + '|' + currentPayee.id + '|' + fiscalYear;
+
+  annualFeeRequestToken += 1;
+  const requestId = annualFeeRequestToken;
+
+  showAnnualFeeLoading_();
+
+  let data;
+
+  try {
+    data = await api('getInvoicePayeeSnapshot', {
+      sourceType: currentPayee.type,
+      sourceId: currentPayee.id,
+      fiscalYear: fiscalYear,
+      excludeInvoiceId: currentInvoiceId || ''
+    });
+
+  } catch (error) {
+    if (requestId !== annualFeeRequestToken) {
+      return;
+    }
+
+    showAnnualFeeError_(
+      error?.message || '年会費の計算に失敗しました。'
+    );
+    return;
+  }
+
+  if (requestId !== annualFeeRequestToken) {
+    return;
+  }
+
+  const proposal = data.annualFeeProposal;
+
+  renderAnnualFeeBasis_(proposal);
+  renderDuplicateWarning_(data.duplicateInvoice);
+
+  if (opts.skipItemReplace) {
+    return;
+  }
+
+  if (
+    !proposal ||
+    proposal.exempt === true ||
+    proposal.requiresMemberCount === true
+  ) {
+    return;
+  }
+
+  const proposalItems =
+    Array.isArray(proposal.items) ? proposal.items : [];
+
+  if (!proposalItems.length) {
+    return;
+  }
+
+  const existingItems = collectItems_();
+
+  if (!itemsAreEffectivelyEmpty_(existingItems)) {
+    if (annualFeeDeclinedKey === requestKey) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      '入力済みの明細を年会費の内容に置き換えますか？'
+    );
+
+    if (!confirmed) {
+      annualFeeDeclinedKey = requestKey;
+      return;
+    }
+  }
+
+  annualFeeDeclinedKey = '';
+  replaceItemsWithAnnualFeeProposal_(proposalItems);
+}
+
+
+/**
+ * 明細1行が実質的に入力済みかどうかを判定する。
+ *
+ * @param {Object} item collectItems_の1件
+ * @return {boolean}
+ */
+function itemHasContent_(item) {
+  return (
+    String(item.item_name || '').trim() !== '' ||
+    Number(item.unit_price_incl_tax || 0) !== 0 ||
+    Number(item.quantity || 0) !== 1
+  );
+}
+
+
+/**
+ * 明細全体が「初期の1行だけで実質未入力」の状態かどうかを判定する。
+ *
+ * @param {Array<Object>} items
+ * @return {boolean}
+ */
+function itemsAreEffectivelyEmpty_(items) {
+  if (items.length === 0) {
+    return true;
+  }
+
+  if (items.length > 1) {
+    return false;
+  }
+
+  return !itemHasContent_(items[0]);
+}
+
+
+/**
+ * annualFeeProposal.itemsで明細行を置き換える。
+ * 既存のaddItemRow_・recalc_をそのまま再利用し、新しい金額計算は行わない。
+ *
+ * @param {Array<Object>} proposalItems
+ */
+function replaceItemsWithAnnualFeeProposal_(proposalItems) {
+  const tbody =
+    document.querySelector('#invoice-items');
+
+  if (tbody) {
+    tbody.innerHTML = '';
+  }
+
+  proposalItems.forEach(function (item) {
+    addItemRow_({
+      item_name: item.item_name || '',
+      quantity: Number(item.quantity || 1),
+      unit: item.unit || '式',
+      unit_price_incl_tax: Number(item.unit_price_incl_tax || 0),
+      tax_type: item.tax_type || 'taxable_10_inclusive'
+    });
+  });
+
+  if (!proposalItems.length) {
+    addItemRow_();
+  }
+
+  recalc_();
+
+  isDirty = true;
+}
+
+
+/**
+ * 年会費計算結果の表示領域（#invoice-annual-fee-info）を、
+ * annualFeeProposalの内容に応じて更新する。
+ *
+ * @param {Object|null} proposal buildAnnualFeeProposal_の戻り値
+ */
+function renderAnnualFeeBasis_(proposal) {
+  const el =
+    document.querySelector('#invoice-annual-fee-info');
+
+  if (!el) {
+    return;
+  }
+
+  if (!proposal) {
+    el.hidden = true;
+    el.innerHTML = '';
+    el.className = 'invoice-annual-fee-info';
+    return;
+  }
+
+  el.hidden = false;
+
+  if (proposal.exempt === true) {
+    setAnnualFeeState_(
+      el,
+      'exempt',
+      '免除',
+      'この会員は年会費免除です。'
+    );
+    return;
+  }
+
+  if (proposal.requiresMemberCount === true) {
+    setAnnualFeeState_(
+      el,
+      'warning',
+      '未確認',
+      '団体会員数が未確認のため自動計算できません。会員管理画面で人数を登録してください。'
+    );
+    return;
+  }
+
+  const amountText =
+    yen(Number(proposal.amount || 0));
+
+  const items =
+    Array.isArray(proposal.items) ? proposal.items : [];
+
+  if (Object.prototype.hasOwnProperty.call(proposal, 'currentCount')) {
+    const baseItem = items[0];
+    const perPersonItem = items[1];
+
+    const bodyText =
+      baseItem && perPersonItem
+        ? '基本会費' +
+          yen(Number(baseItem.unit_price_incl_tax || 0)) +
+          '＋構成員' +
+          Number(proposal.currentCount || 0) +
+          '名×' +
+          yen(Number(perPersonItem.unit_price_incl_tax || 0)) +
+          '＝' +
+          amountText
+        : '団体会員の年会費：' + amountText;
+
+    setAnnualFeeState_(el, 'success', '団体会員', bodyText);
+    return;
+  }
+
+  const isOverride =
+    items.some(function (item) {
+      return item.calculation_source === 'member_override';
+    });
+
+  setAnnualFeeState_(
+    el,
+    'success',
+    '年会費',
+    (isOverride ? '個別設定された年会費：' : '標準年会費：') +
+      amountText
+  );
+}
+
+
+/**
+ * #invoice-annual-fee-infoの表示内容をまとめて設定する。
+ * 色だけでなく見出し文言・記号・文字ウェイトでも状態を区別する。
+ *
+ * @param {HTMLElement} el
+ * @param {string} state 'loading' | 'success' | 'warning' | 'error' | 'exempt'
+ * @param {string} heading
+ * @param {string} bodyText
+ */
+function setAnnualFeeState_(el, state, heading, bodyText) {
+  el.className =
+    'invoice-annual-fee-info invoice-annual-fee-info--' + state;
+
+  el.innerHTML = `
+    <span class="invoice-annual-fee-info__icon" aria-hidden="true">
+      ${esc(getAnnualFeeIcon_(state))}
+    </span>
+
+    <span class="invoice-annual-fee-info__text">
+      <strong class="invoice-annual-fee-info__heading">
+        ${esc(heading)}
+      </strong>
+
+      <span class="invoice-annual-fee-info__body">
+        ${esc(bodyText)}
+      </span>
+    </span>
+  `;
+}
+
+
+/**
+ * 状態ごとの記号（アイコン相当）。
+ *
+ * @param {string} state
+ * @return {string}
+ */
+function getAnnualFeeIcon_(state) {
+  const icons = {
+    loading: '…',
+    success: '✓',
+    warning: '！',
+    error: '×',
+    exempt: '－'
+  };
+
+  return icons[state] || '';
+}
+
+
+/**
+ * 計算中の表示にする。
+ */
+function showAnnualFeeLoading_() {
+  const el =
+    document.querySelector('#invoice-annual-fee-info');
+
+  if (!el) {
+    return;
+  }
+
+  el.hidden = false;
+  setAnnualFeeState_(el, 'loading', '年会費', '計算中…');
+}
+
+
+/**
+ * エラー表示にする。既存の明細・フォーム内容には触れない。
+ *
+ * @param {string} message
+ */
+function showAnnualFeeError_(message) {
+  const el =
+    document.querySelector('#invoice-annual-fee-info');
+
+  if (!el) {
+    return;
+  }
+
+  el.hidden = false;
+  setAnnualFeeState_(el, 'error', 'エラー', message);
+}
+
+
+/**
+ * 年会費の計算根拠・重複警告表示をどちらも隠す。
+ */
+function clearAnnualFeeInfo_() {
+  const el =
+    document.querySelector('#invoice-annual-fee-info');
+
+  if (el) {
+    el.hidden = true;
+    el.innerHTML = '';
+    el.className = 'invoice-annual-fee-info';
+  }
+
+  clearDuplicateWarning_();
+  annualFeeDeclinedKey = '';
+}
+
+
+/**
+ * 同一年度の重複請求警告を更新する。
+ * 編集中の下書き自身（currentInvoiceIdと同じinvoice_id）は警告しない。
+ *
+ * @param {Object|null} duplicate findAnnualFeeDuplicate_の結果
+ */
+function renderDuplicateWarning_(duplicate) {
+  const el =
+    document.querySelector('#invoice-annual-fee-duplicate');
+
+  if (!el) {
+    return;
+  }
+
+  if (
+    !duplicate ||
+    String(duplicate.invoice_id || '') === String(currentInvoiceId || '')
+  ) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+
+  const detailParts = [
+    duplicate.invoice_number
+      ? '請求書番号：' + duplicate.invoice_number
+      : '',
+    duplicate.status
+      ? '状態：' + duplicate.status
+      : ''
+  ].filter(Boolean);
+
+  const detailText =
+    detailParts.length
+      ? '（' + detailParts.join('／') + '）'
+      : '';
+
+  el.hidden = false;
+
+  el.innerHTML = `
+    <div class="c-alert c-alert--warning">
+      同じ年度の年会費請求書が既に存在します。${esc(detailText)}
+    </div>
+  `;
+}
+
+
+/**
+ * 重複請求警告だけを隠す。
+ */
+function clearDuplicateWarning_() {
+  const el =
+    document.querySelector('#invoice-annual-fee-duplicate');
+
+  if (el) {
+    el.hidden = true;
+    el.innerHTML = '';
+  }
 }
 
 
@@ -1480,6 +1955,8 @@ async function loadDraft_(invoiceId) {
     recalc_();
 
     updateModeIndicator_(invoice);
+
+    maybeUpdateAnnualFee_({ skipItemReplace: true });
 
 const issueButton =
   document.querySelector('#invoice-issue');
